@@ -8,11 +8,11 @@ Source of pick: `../../../plans/reports/brainstorm-260927-stars-first-report.md`
 | # | Phase | Status |
 |---|---|---|
 | 01 | Module contracts (types + exact APIs) — `phase-01-module-contracts.md` | done |
-| 02 | Parallel module implementation (core, gpu sim, renderers, game/input, relay server, iOS app) | pending |
-| 03 | App integration (`src/app/*`, `src/main.ts`, `index.html`) + build green | pending |
-| 04 | E2E tests in headless Chromium WebGPU + fix loop | pending |
-| 05 | Code review (TS + Swift) + fixes | pending |
-| 06 | README (EN + 中文), docs, CI + Pages workflow | pending |
+| 02 | Parallel module implementation (core, gpu sim, renderers, game/input, relay server, iOS app) | done |
+| 03 | App integration (`src/app/*`, `src/main.ts`, `index.html`) + build green | done |
+| 04 | E2E tests in headless Chromium WebGPU + fix loop | done |
+| 05 | Code review (TS + Swift) + fixes | done |
+| 06 | README (EN + 中文), docs, CI + Pages workflow | done |
 
 ## Architecture (data flow)
 ```
