@@ -5,9 +5,9 @@ import type {} from '../../src/app/livesand-debug-api';
 
 export const SCREENS_DIR = fileURLToPath(new URL('../../e2e-screens/', import.meta.url));
 
-// Presenting a WebGPU canvas under headless SwiftShader needs ANGLE on SwiftShader, or the device is lost.
+// GPU-less hosts (CI) have no Vulkan driver, so the WebGPU canvas swap chain needs Chromium's bundled SwiftShader Vulkan.
 const gpuArgs = ['--enable-unsafe-webgpu', '--enable-features=Vulkan'];
-gpuArgs.push(process.env.LIVESAND_E2E_GPU === '1' ? '--use-angle=vulkan' : '--use-angle=swiftshader');
+gpuArgs.push(...(process.env.LIVESAND_E2E_GPU === '1' ? ['--use-angle=vulkan'] : ['--use-angle=swiftshader', '--use-vulkan=swiftshader']));
 /** Pass to test.use() in every app spec. */
 export const APP_TEST_OPTIONS = { viewport: { width: 1280, height: 800 }, launchOptions: { args: gpuArgs } };
 

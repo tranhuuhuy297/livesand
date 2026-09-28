@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 // Distinct ports let parallel runs coexist; LIVESAND_E2E_GPU=1 uses the real GPU instead of SwiftShader.
 const port = Number(process.env.E2E_PORT ?? 5199);
-// ANGLE backend is required for WebGPU canvas presentation in headless Chromium (SwiftShader alone loses the device).
+// Enough for compute/offscreen specs; canvas-presenting app specs add SwiftShader Vulkan in their helper, which would slow screenshots here.
 const webgpuArgs = ['--enable-unsafe-webgpu', '--enable-features=Vulkan'];
 webgpuArgs.push(process.env.LIVESAND_E2E_GPU === '1' ? '--use-angle=vulkan' : '--use-angle=swiftshader');
 
