@@ -1,0 +1,55 @@
+{
+  "name": "livesand",
+  "version": "0.1.0",
+  "description": "An AR sandbox in a browser tab: WebGPU shallow-water simulation on real sand (iPhone LiDAR + projector) or a virtual sandbox.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "livesand": "dist-server/cli.js"
+  },
+  "files": [
+    "dist",
+    "dist-server",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "preview": "vite preview",
+    "start": "node dist-server/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "keywords": [
+    "ar-sandbox",
+    "webgpu",
+    "lidar",
+    "projection-mapping",
+    "shallow-water",
+    "simulation",
+    "sandbox",
+    "education"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.3",
+    "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.1",
+    "@webgpu/types": "^0.1.74",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "wgpu-matrix": "^3.4.2",
+    "ws": "^8.22.0"
+  }
+}
