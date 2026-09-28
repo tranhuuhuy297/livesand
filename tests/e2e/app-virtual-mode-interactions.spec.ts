@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { APP_TEST_OPTIONS, SCREENS_DIR, appState, heightsDelta, openApp, stepFrames } from './app-e2e-test-helpers';
 import { touchPointer, waterSum, watchConsole } from './app-e2e-test-helpers';
+import { scaled } from './e2e-timing';
 
 test.use(APP_TEST_OPTIONS);
 test.beforeAll(() => mkdirSync(SCREENS_DIR, { recursive: true }));
@@ -70,7 +71,7 @@ test('help and the real-sandbox dialog hold the clock and the water; Enter behin
 });
 
 test('holding Space to orbit when a level is lost does not click the focused Retry on release', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(scaled(120_000));
   await openApp(page, '?level=first-flood&view=3d');
   await page.keyboard.press('Enter');
   await page.keyboard.down(' ');
@@ -143,7 +144,7 @@ test('free play: living landscape, new terrain and a rain toggle instead of a cl
 });
 
 test('the storm is visible: rain overlay over the canvas while the Flash Flood storm peaks', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(scaled(120_000));
   await openApp(page, '?level=flash-flood&view=3d');
   await expect(page.locator('.ls-storm-fx')).toBeHidden();
   await page.keyboard.press('Enter');

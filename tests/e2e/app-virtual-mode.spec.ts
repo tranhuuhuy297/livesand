@@ -12,6 +12,7 @@ import {
   stepFrames,
   watchConsole,
 } from './app-e2e-test-helpers';
+import { scaled } from './e2e-timing';
 
 test.use(APP_TEST_OPTIONS);
 
@@ -54,7 +55,7 @@ test('mouse sculpting changes the heightmap in 2D and 3D', async ({ page }) => {
 });
 
 test('idle play on the first level floods the village and loses in time', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(scaled(180_000));
   const problems = watchConsole(page);
   await openApp(page, '?level=first-flood&view=2d');
   await page.keyboard.press('Enter');
@@ -77,7 +78,7 @@ test('idle play on the first level floods the village and loses in time', async 
 });
 
 test('one quick swipe from the village to the sea saves the first level', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(scaled(180_000));
   const problems = watchConsole(page);
   await openApp(page, '?level=first-flood&view=2d');
   await page.keyboard.press('Enter');
@@ -120,7 +121,7 @@ test('one quick swipe from the village to the sea saves the first level', async 
 });
 
 test('switches between the 2D map and the 3D view with water on screen', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(scaled(120_000));
   const problems = watchConsole(page);
   await openApp(page, '?level=flash-flood&view=2d');
   await page.keyboard.press('Enter');
@@ -148,7 +149,7 @@ test('switches between the 2D map and the 3D view with water on screen', async (
 });
 
 test('captures the briefing, menus and dialogs for visual review', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(scaled(120_000));
   const problems = watchConsole(page);
   await openApp(page, '?level=twin-towns');
   await stepFrames(page, 1, 1 / 60);
@@ -184,7 +185,7 @@ test('shows a friendly page when WebGPU is unavailable', async ({ page }) => {
     Object.defineProperty(Navigator.prototype, 'gpu', { get: () => undefined, configurable: true });
   });
   await page.goto('/');
-  await page.waitForFunction(() => Boolean(window.__livesand?.error), null, { timeout: 30_000 });
+  await page.waitForFunction(() => Boolean(window.__livesand?.error), null, { timeout: scaled(30_000) });
   await expect(page.locator('.ls-fatal-title')).toContainText('can’t run LiveSand');
   await expect(page.locator('.ls-fatal-tips li')).not.toHaveCount(0);
   await expect(page.locator('.ls-fatal-preview img')).toHaveJSProperty('complete', true);

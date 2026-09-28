@@ -5,6 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { startFakeDepthSource } from '../../server/fake-depth-source';
 import { startRelayServer, type RelayServer } from '../../server/relay-server';
 import { dragBy, openHarness, stats, status, type Quad4, type TestWindow } from './physical-mode-test-helpers';
+import { scaled } from './e2e-timing';
 
 const SCREENS_DIR = fileURLToPath(new URL('../../e2e-screens/', import.meta.url));
 const STORAGE_KEY = 'livesand.physical-calibration';
@@ -29,7 +30,7 @@ test.afterAll(async () => {
 const wizard = (page: Page) => page.getByTestId('calibration-wizard');
 
 test('pairing, calibration wizard and live terrain from a fake depth source', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(scaled(120_000));
   const problems: string[] = [];
   page.on('pageerror', (err) => problems.push(`pageerror: ${err.message}`));
   page.on('console', (msg) => { if (msg.type() === 'error') problems.push(msg.text()); });
@@ -37,8 +38,8 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
   await test.step('pairing panel shows the relay QR while no depth source is connected', async () => {
     await openHarness(page, relayWs('viewer'));
     await expect(page.getByTestId('pairing-panel')).toBeVisible();
-    await expect(page.getByTestId('pairing-status')).toContainText('Relay connected', { timeout: 10_000 });
-    await expect(page.getByTestId('pairing-qr')).not.toHaveClass(/is-loading/, { timeout: 10_000 });
+    await expect(page.getByTestId('pairing-status')).toContainText('Relay connected', { timeout: scaled(10_000) });
+    await expect(page.getByTestId('pairing-qr')).not.toHaveClass(/is-loading/, { timeout: scaled(10_000) });
     expect(await page.locator('.lsp-qr-img').getAttribute('src')).toMatch(/^data:image\/png;base64,/);
     await expect(page.locator('.lsp-url')).toHaveText(relayWs('source'));
     await expect(page.locator('.lsp-cmd')).toContainText(`fake-source --url ${relayWs('source')}`);
@@ -47,7 +48,7 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
 
   await test.step('a live source opens the wizard; corners are clicked on the depth preview', async () => {
     fake = startFakeDepthSource({ url: relayWs('source'), fps: 30 });
-    await expect(wizard(page)).toBeVisible({ timeout: 15_000 });
+    await expect(wizard(page)).toBeVisible({ timeout: scaled(15_000) });
     await expect(page.getByTestId('pairing-panel')).toHaveCount(0);
     await expect(wizard(page)).toHaveAttribute('data-step', '0');
     const stage = page.getByTestId('roi-stage');
@@ -66,7 +67,7 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
     await expect(wizard(page)).toHaveAttribute('data-step', '1');
     await expect(page.getByTestId('wizard-next')).toBeDisabled();
     await page.getByTestId('capture-reference').click();
-    await expect(page.getByTestId('capture-result')).toContainText('Flat sand at', { timeout: 15_000 });
+    await expect(page.getByTestId('capture-result')).toContainText('Flat sand at', { timeout: scaled(15_000) });
     await page.screenshot({ path: `${SCREENS_DIR}physical-wizard-capture.png` });
     await page.getByTestId('wizard-next').click();
 
@@ -97,7 +98,7 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
     const keystone = await page.evaluate(() => (window as TestWindow).__livesandPhysical!.calibration!.keystone as Quad4);
     expect(keystone[0].x).toBeGreaterThan(0.03); // TL dragged right/down
     expect(keystone[2].x).toBeLessThan(0.98); // BR dragged left/up from the screen corner
-    await expect.poll(async () => (await stats(page)).handCells, { timeout: 10_000 }).toBeGreaterThan(0);
+    await expect.poll(async () => (await stats(page)).handCells, { timeout: scaled(10_000) }).toBeGreaterThan(0);
   });
 
   await test.step('plane-referenced calibration: poll() shows the mound above flat sand and the hovering hand', async () => {
@@ -107,7 +108,7 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
       c.applyCalibration({ ...c.calibration, roiQuad, referenceDepth: null, referencePlaneMeters: 1.0 }, false);
       (window as TestWindow).__physicalHarness!.resetStats();
     });
-    await expect.poll(async () => { const s = await stats(page); return s.maxHeight - s.flat; }, { timeout: 10_000 }).toBeGreaterThan(10);
+    await expect.poll(async () => { const s = await stats(page); return s.maxHeight - s.flat; }, { timeout: scaled(10_000) }).toBeGreaterThan(10);
     const s = await stats(page);
     expect(s.handCells).toBeGreaterThan(0);
     expect(s.flat).toBeGreaterThan(0);
@@ -120,7 +121,7 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
 
   await test.step('the saved calibration and keystone are reused after a reload', async () => {
     await openHarness(page, relayWs('viewer'));
-    await expect.poll(async () => (await stats(page)).polls, { timeout: 10_000 }).toBeGreaterThan(3);
+    await expect.poll(async () => (await stats(page)).polls, { timeout: scaled(10_000) }).toBeGreaterThan(3);
     await expect(wizard(page)).toHaveCount(0);
     await expect(page.getByTestId('pairing-panel')).toHaveCount(0);
     expect((await status(page)).calibrated).toBe(true);
@@ -144,8 +145,8 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
   await test.step('losing the depth source brings the pairing panel back after a grace period', async () => {
     fake?.stop();
     fake = null;
-    await expect.poll(async () => (await status(page)).sources, { timeout: 10_000 }).toBe(0);
-    await expect(page.getByTestId('pairing-panel')).toBeVisible({ timeout: 12_000 });
+    await expect.poll(async () => (await status(page)).sources, { timeout: scaled(10_000) }).toBe(0);
+    await expect(page.getByTestId('pairing-panel')).toBeVisible({ timeout: scaled(12_000) });
     expect((await status(page)).connected).toBe(true);
   });
 
@@ -159,8 +160,8 @@ test('the pairing panel explains an unreachable relay and keeps retrying', async
   await probe.close();
   await openHarness(page, `ws://127.0.0.1:${deadPort}/ws?role=viewer`);
   await expect(page.getByTestId('pairing-panel')).toBeVisible();
-  await expect(page.getByTestId('pairing-status')).toContainText("Can't reach the relay", { timeout: 10_000 });
-  await expect(page.locator('.lsp-relay-note')).toContainText('Is the relay running?', { timeout: 10_000 });
+  await expect(page.getByTestId('pairing-status')).toContainText("Can't reach the relay", { timeout: scaled(10_000) });
+  await expect(page.locator('.lsp-relay-note')).toContainText('Is the relay running?', { timeout: scaled(10_000) });
   expect(await status(page)).toMatchObject({ connected: false, sources: 0, fps: 0, calibrated: false });
   await page.screenshot({ path: `${SCREENS_DIR}physical-pairing-offline.png` });
 });

@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+import { scaled } from './e2e-timing';
 
 interface PixelStats {
   distinctColors: number;
@@ -30,7 +31,7 @@ async function waitForHarness(page: Page): Promise<HarnessSnapshot> {
           return Boolean(h && (h.ready || h.error));
         },
         null,
-        { timeout: 45_000 },
+        { timeout: scaled(45_000) },
       );
       return await page.evaluate(() => {
         const h = (window as unknown as { __harness: HarnessSnapshot }).__harness;

@@ -2,6 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
 import type {} from '../../src/app/livesand-debug-api';
+import { scaled } from './e2e-timing';
 
 export const SCREENS_DIR = fileURLToPath(new URL('../../e2e-screens/', import.meta.url));
 
@@ -36,7 +37,7 @@ export async function openApp(page: Page, query: string): Promise<void> {
   for (let attempt = 0; ; attempt++) {
     try {
       await page.goto(`/${query}`);
-      await page.waitForFunction(() => window.__livesand?.ready === true || Boolean(window.__livesand?.error), null, { timeout: 45_000 });
+      await page.waitForFunction(() => window.__livesand?.ready === true || Boolean(window.__livesand?.error), null, { timeout: scaled(45_000) });
       break;
     } catch (err) {
       if (attempt >= 2) throw err;

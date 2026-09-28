@@ -5,11 +5,12 @@ import { startFakeDepthSource } from '../../server/fake-depth-source';
 import { startRelayServer } from '../../server/relay-server';
 import type {} from '../../src/app/physical/physical-mode-controller';
 import { APP_TEST_OPTIONS, SCREENS_DIR, openApp, watchConsole } from './app-e2e-test-helpers';
+import { scaled } from './e2e-timing';
 
 test.use(APP_TEST_OPTIONS);
 
 test('projector mode turns a fake depth stream into terrain and hand rain', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(scaled(120_000));
   const relay = await startRelayServer({ port: 0, host: '127.0.0.1' });
   const fake = startFakeDepthSource({ url: `ws://127.0.0.1:${relay.port}/ws?role=source`, fps: 30 });
   try {
@@ -17,7 +18,7 @@ test('projector mode turns a fake depth stream into terrain and hand rain', asyn
     const viewer = `ws://127.0.0.1:${relay.port}/ws?role=viewer`;
     await openApp(page, `?mode=projector&relay=${encodeURIComponent(viewer)}`);
     const physical = async () => (await page.evaluate(() => window.__livesand!.debug.state())).physical as { sources: number };
-    await expect.poll(async () => (await physical()).sources, { timeout: 15_000 }).toBe(1);
+    await expect.poll(async () => (await physical()).sources, { timeout: scaled(15_000) }).toBe(1);
     await expect(page.locator('.ls-projector-hud')).toBeVisible();
 
     // What a finished wizard saves for a 1 m box seen whole by the phone, 1 m above flat sand.
@@ -52,10 +53,10 @@ test('projector mode turns a fake depth stream into terrain and hand rain', asyn
         }
         return hi - lo;
       });
-    await expect.poll(relief, { timeout: 15_000 }).toBeGreaterThan(5);
+    await expect.poll(relief, { timeout: scaled(15_000) }).toBeGreaterThan(5);
     // The fake "hand" hovers over the box, so rain must start collecting on the sand.
     const water = () => page.evaluate(async () => (await window.__livesand!.debug.readWater()).reduce((s, d) => s + d, 0));
-    await expect.poll(water, { timeout: 30_000 }).toBeGreaterThan(1);
+    await expect.poll(water, { timeout: scaled(30_000) }).toBeGreaterThan(1);
     await page.screenshot({ path: `${SCREENS_DIR}app-projector.png` });
     await page.keyboard.press('h');
     await expect(page.locator('.ls-projector-hud')).toBeHidden();

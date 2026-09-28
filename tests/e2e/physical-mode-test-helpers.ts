@@ -1,5 +1,6 @@
 // Page helpers for the physical-mode e2e: harness loading, window hooks, pointer drags.
 import type { Page } from '@playwright/test';
+import { scaled } from './e2e-timing';
 
 export interface Stats { polls: number; maxHeight: number; flat: number; handCells: number }
 export interface Status { connected: boolean; sources: number; fps: number; calibrated: boolean; message: string }
@@ -21,7 +22,7 @@ export async function openHarness(page: Page, relayUrl: string): Promise<void> {
   for (let attempt = 0; ; attempt++) {
     try {
       await page.goto(url);
-      await page.waitForFunction(() => (window as TestWindow).__physicalHarness?.ready === true, null, { timeout: 30_000 });
+      await page.waitForFunction(() => (window as TestWindow).__physicalHarness?.ready === true, null, { timeout: scaled(30_000) });
       return;
     } catch (err) {
       if (attempt >= 2) throw err;
