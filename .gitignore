@@ -7,3 +7,4 @@ playwright-report/
 .DS_Store
 ios/**/*.xcodeproj/
 ios/**/DerivedData/
+e2e-screens/

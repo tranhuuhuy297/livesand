@@ -1,0 +1,48 @@
+# XcodeGen spec: `xcodegen generate` in this folder creates LiveSandDepth.xcodeproj (git-ignored).
+name: LiveSandDepth
+options:
+  bundleIdPrefix: io.livesand
+  developmentLanguage: en
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+targets:
+  LiveSandDepth:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_NAME: LiveSandDepth
+        PRODUCT_BUNDLE_IDENTIFIER: io.livesand.depth
+        INFOPLIST_FILE: Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: "NO"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: "NO"
+        CODE_SIGN_STYLE: Automatic
+        # Pick your (free) Personal Team in Xcode > Signing & Capabilities, or set it here:
+        # DEVELOPMENT_TEAM: ABCDE12345
+    scheme:
+      testTargets:
+        - LiveSandDepthTests
+  LiveSandDepthTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: LiveSandDepth
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.livesand.depth.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic

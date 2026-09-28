@@ -1,0 +1,15 @@
+/* Projector mode panel: small, dark, top-left; everything else on screen is the projected sandbox. */
+.ls-physical-ui { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+.ls-physical-ui > * { pointer-events: auto; }
+.ls-projector-hud { position: fixed; top: 16px; left: 16px; z-index: 30; display: grid; gap: 8px; width: min(380px, calc(100vw - 32px)); padding: 14px 16px; background: rgba(10, 14, 20, 0.88); }
+.ls-projector-head { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.ls-projector-head .ls-logo { width: 26px; height: 26px; }
+.ls-projector-head .ls-logo svg { width: 100%; height: 100%; }
+.ls-projector-line { display: flex; align-items: center; gap: 8px; color: #c4d0dc; font-size: 13px; }
+.ls-status-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--ls-danger); box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.18); }
+.ls-status-dot.is-waiting { background: #fbbf24; box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.18); animation: ls-pulse 1.2s ease-in-out infinite; }
+.ls-status-dot.is-live { background: var(--ls-safe); box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2); }
+.ls-projector-message { color: var(--ls-muted); font-size: 12px; }
+.ls-projector-game { padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); font-weight: 600; font-size: 13px; }
+.ls-projector-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ls-projector-hint { color: var(--ls-muted); font-size: 11px; }

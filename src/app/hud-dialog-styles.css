@@ -1,0 +1,42 @@
+/* Dialogs: modal shell, result stars, help grid and the real-sandbox setup steps. */
+.ls-modal-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(4, 7, 11, 0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 20; pointer-events: auto; animation: ls-fade 0.18s ease-out; }
+.ls-modal { position: relative; width: min(540px, 100%); max-height: calc(100dvh - 32px); overflow: auto; padding: 28px; background: var(--ls-panel-strong); border-color: var(--ls-border-strong); animation: ls-pop 0.22s ease-out; }
+.ls-modal-close { position: absolute; top: 12px; right: 12px; }
+.ls-modal-title { margin: 0 0 8px; font-size: 24px; line-height: 1.2; letter-spacing: -0.01em; }
+.ls-modal-lead { margin: 0 0 18px; color: #c4d0dc; font-size: 15px; }
+.ls-modal-note { margin: 0 0 18px; padding: 10px 12px; border-radius: 10px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); color: #bae6fd; font-size: 13px; }
+.ls-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.ls-modal-actions .ls-btn { height: 42px; padding: 0 16px; }
+.ls-modal-hero { width: 56px; height: 56px; margin-bottom: 14px; padding: 12px; border-radius: 16px; background: linear-gradient(180deg, rgba(243, 205, 131, 0.22), rgba(216, 156, 57, 0.12)); color: var(--ls-sand); }
+.ls-modal-hero svg { width: 100%; height: 100%; }
+
+/* Result */
+.ls-result .ls-modal { text-align: center; width: min(440px, 100%); }
+.ls-result .ls-modal-actions { justify-content: center; }
+.ls-stars { display: flex; justify-content: center; gap: 10px; margin: 4px 0 14px; }
+.ls-star { width: 46px; height: 46px; color: rgba(255, 255, 255, 0.13); }
+.ls-star svg { width: 100%; height: 100%; }
+.ls-star.is-lit { color: #fbcf5f; filter: drop-shadow(0 0 12px rgba(251, 207, 95, 0.55)); animation: ls-star-in 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) backwards; }
+.ls-star:nth-child(2).is-lit { animation-delay: 0.12s; }
+.ls-star:nth-child(3).is-lit { animation-delay: 0.24s; }
+.ls-result[data-outcome='lost'] .ls-modal-title { color: #fca5a5; }
+.ls-result[data-outcome='won'] .ls-modal-title { color: #fde68a; }
+
+/* Help */
+.ls-help .ls-modal { width: min(720px, 100%); }
+.ls-help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 28px; }
+.ls-help-grid h3 { margin: 12px 0 8px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ls-sand); }
+.ls-help-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.ls-help-row > span:last-child { color: #c4d0dc; text-align: right; }
+.ls-keys { display: inline-flex; gap: 4px; flex: none; }
+.ls-help-actions { margin-top: 18px; }
+
+/* Real sandbox steps */
+.ls-steps { display: grid; gap: 10px; margin: 0 0 18px; padding: 0; list-style: none; counter-reset: step; }
+.ls-steps li { position: relative; display: grid; gap: 2px; padding-left: 38px; counter-increment: step; }
+.ls-steps li::before { content: counter(step); position: absolute; left: 0; top: 1px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: rgba(56, 189, 248, 0.15); color: var(--ls-water); font-weight: 800; font-size: 13px; }
+.ls-steps strong { font-size: 14px; }
+.ls-steps span { color: var(--ls-muted); font-size: 13px; }
+
+@keyframes ls-fade { from { opacity: 0; } }
+@keyframes ls-star-in { from { opacity: 0; transform: scale(0.4) rotate(-20deg); } }

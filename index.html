@@ -2,10 +2,43 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LiveSand</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>LiveSand — an AR sandbox in your browser</title>
+    <meta
+      name="description"
+      content="Sculpt terrain, make it rain and save the villages from the flood. A WebGPU water simulation that also turns a real sandbox, an iPhone LiDAR and a projector into an AR sandbox."
+    />
+    <meta name="theme-color" content="#0a0f15" />
+    <meta name="color-scheme" content="dark" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LiveSand" />
+    <meta property="og:title" content="LiveSand — an AR sandbox in your browser" />
+    <meta
+      property="og:description"
+      content="Dig rivers, build levees and save the villages from the flood. Real-time WebGPU shallow water on sculptable sand — or on real sand with an iPhone LiDAR and a projector."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="LiveSand — an AR sandbox in your browser" />
+    <meta
+      name="twitter:description"
+      content="Dig rivers, build levees and save the villages from the flood. WebGPU water on sculptable sand, or on real sand with iPhone LiDAR + projector."
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23101a24'/%3E%3Cpath d='M3 22c5-8 9-12 13.5-12S24 14 29 20v7H3z' fill='%23e8b75c'/%3E%3Cpath d='M3 23c4-2 7-2 10 0s6 2 10 0 5-2 6-1v8H3z' fill='%2338bdf8'/%3E%3C/svg%3E"
+    />
   </head>
   <body>
+    <div id="app">
+      <div class="ls-boot" role="status" aria-live="polite">
+        <div class="ls-boot-spinner" aria-hidden="true"></div>
+        <span>Warming up the sandbox…</span>
+      </div>
+    </div>
+    <noscript>
+      <p class="ls-noscript">LiveSand needs JavaScript and a WebGPU-capable browser (recent Chrome, Edge, Safari or Firefox).</p>
+    </noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

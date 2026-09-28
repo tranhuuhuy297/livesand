@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "tests/unit", "vite.config.ts", "vitest.config.ts", "playwright.config.ts", "tests/e2e"]
+  "include": ["src", "tests/unit", "tests/gpu-harness", "vite.config.ts", "vitest.config.ts", "playwright.config.ts", "tests/e2e"]
 }
