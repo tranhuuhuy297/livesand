@@ -1,8 +1,6 @@
 # LiveSand MVP — plan
 
-Goal: an AR sandbox that runs in a browser tab. Real sand + iPhone LiDAR + projector, or a virtual sandbox (mouse sculpting) that anyone can open on GitHub Pages. Objective: GitHub stars (demo-first, repo is the product).
-
-Source of pick: `../../../plans/reports/brainstorm-260927-stars-first-report.md` (LiveSand: verifier 150-800★, median ~300).
+Goal: an AR sandbox that runs in a browser tab. Real sand + iPhone LiDAR + projector, or a virtual sandbox (mouse sculpting) that anyone can open on GitHub Pages. Demo-first: the repo and the live page are the product.
 
 ## Phases
 | # | Phase | Status |
