@@ -13,7 +13,13 @@ export interface RenderStyle {
   verticalScale: number;
   showHillshade: boolean;
   timeSec: number;
+  /** Ground below this height shows as sea water (display only); SEA_LEVEL_OFF disables it. */
+  seaLevel: number;
+  /** 0..1 storm strength: darker sky, heavier fog, rain rings everywhere. */
+  stormLevel: number;
 }
+
+export const SEA_LEVEL_OFF = -1e6;
 
 export const DEFAULT_RENDER_STYLE: RenderStyle = Object.freeze({
   minHeight: 0,
@@ -22,6 +28,8 @@ export const DEFAULT_RENDER_STYLE: RenderStyle = Object.freeze({
   verticalScale: 1.5,
   showHillshade: true,
   timeSec: 0,
+  seaLevel: SEA_LEVEL_OFF,
+  stormLevel: 0,
 });
 
 /** Frame bindings, sim samplers, colormap/contours/hillshade, water shading and village markers in one module. */
@@ -36,7 +44,7 @@ export const SHADING_COMMON_WGSL = [
 /** Merges a style patch, ignoring non-finite numbers so one bad slider value cannot blank the view. */
 export function mergeRenderStyle(base: RenderStyle, patch: Partial<RenderStyle>): RenderStyle {
   const next: RenderStyle = { ...base };
-  const numeric = ['minHeight', 'maxHeight', 'contourInterval', 'verticalScale', 'timeSec'] as const;
+  const numeric = ['minHeight', 'maxHeight', 'contourInterval', 'verticalScale', 'timeSec', 'seaLevel', 'stormLevel'] as const;
   for (const key of numeric) {
     const value = patch[key];
     if (typeof value === 'number' && Number.isFinite(value)) next[key] = value;

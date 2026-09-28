@@ -12,6 +12,14 @@ enum DepthFrameEncoder {
     static let version: UInt16 = 1
     static let formatUInt16Millimeters: UInt16 = 2
     static let headerByteCount = 28
+    /// `ARConfidenceLevel.medium`: ARKit marks hand/object edges and dark or shiny spots `.low`; they read as spikes.
+    static let minimumConfidence: UInt8 = 1
+
+    /// ARKit confidence map: one `ARConfidenceLevel` raw value per pixel, rows `bytesPerRow` apart.
+    struct ConfidencePlane {
+        let base: UnsafeRawPointer
+        let bytesPerRow: Int
+    }
 
     enum EncodeError: LocalizedError, Equatable {
         case unsupportedPixelFormat(UInt32)
@@ -55,12 +63,15 @@ enum DepthFrameEncoder {
         return data
     }
 
-    /// Encodes Float32 meter rows (`bytesPerRow` apart, row 0 = top) as a complete LSD1 uint16-mm frame.
+    /// Encodes Float32 meter rows (`bytesPerRow` apart, row 0 = top) as a complete LSD1 uint16-mm frame;
+    /// pixels below `minimumConfidence` in `confidence` are sent as 0 (invalid), which the browser skips.
     static func encodeFrame(
         metersBase: UnsafeRawPointer, width: Int, height: Int, bytesPerRow: Int,
-        timestampMs: Double, frameIndex: UInt32
+        confidence: ConfidencePlane? = nil, timestampMs: Double, frameIndex: UInt32
     ) throws -> Data {
-        guard width > 0, height > 0, bytesPerRow >= width * MemoryLayout<Float32>.stride else {
+        guard width > 0, height > 0, bytesPerRow >= width * MemoryLayout<Float32>.stride,
+              (confidence?.bytesPerRow ?? width) >= width
+        else {
             throw EncodeError.invalidLayout(width: width, height: height, bytesPerRow: bytesPerRow)
         }
         var data = header(width: width, height: height, timestampMs: timestampMs, frameIndex: frameIndex)
@@ -69,8 +80,11 @@ enum DepthFrameEncoder {
             var offset = headerByteCount
             for y in 0..<height {
                 let row = metersBase.advanced(by: y * bytesPerRow).assumingMemoryBound(to: Float32.self)
+                let trust = confidence.map { $0.base.advanced(by: y * $0.bytesPerRow).assumingMemoryBound(to: UInt8.self) }
                 for x in 0..<width {
-                    out.storeBytes(of: millimeters(fromMeters: row[x]).littleEndian, toByteOffset: offset, as: UInt16.self)
+                    let trusted = trust.map { $0[x] >= minimumConfidence } ?? true
+                    let mm = trusted ? millimeters(fromMeters: row[x]) : 0
+                    out.storeBytes(of: mm.littleEndian, toByteOffset: offset, as: UInt16.self)
                     offset += MemoryLayout<UInt16>.size
                 }
             }
@@ -88,8 +102,9 @@ enum DepthFrameEncoder {
 
 #if canImport(CoreVideo)
 extension DepthFrameEncoder {
-    /// Encodes an ARKit depth map (kCVPixelFormatType_DepthFloat32, meters) as-is in sensor orientation.
-    static func encode(depthMap: CVPixelBuffer, timestampMs: Double, frameIndex: UInt32) throws -> Data {
+    /// Encodes an ARKit depth map (kCVPixelFormatType_DepthFloat32, meters) as-is in sensor orientation,
+    /// blanking low-confidence pixels when a matching confidence map (OneComponent8) is given.
+    static func encode(depthMap: CVPixelBuffer, confidenceMap: CVPixelBuffer?, timestampMs: Double, frameIndex: UInt32) throws -> Data {
         let pixelFormat = CVPixelBufferGetPixelFormatType(depthMap)
         guard pixelFormat == kCVPixelFormatType_DepthFloat32 else {
             throw EncodeError.unsupportedPixelFormat(pixelFormat)
@@ -98,13 +113,23 @@ extension DepthFrameEncoder {
         guard lockStatus == kCVReturnSuccess else { throw EncodeError.lockFailed(lockStatus) }
         defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(depthMap) else { throw EncodeError.missingBaseAddress }
+        let width = CVPixelBufferGetWidth(depthMap)
+        let height = CVPixelBufferGetHeight(depthMap)
+
+        // An unusable confidence map only costs the filtering, never the frame.
+        let confidence = confidenceMap.flatMap { map -> CVPixelBuffer? in
+            let matches = CVPixelBufferGetPixelFormatType(map) == kCVPixelFormatType_OneComponent8
+                && CVPixelBufferGetWidth(map) == width && CVPixelBufferGetHeight(map) == height
+            return matches && CVPixelBufferLockBaseAddress(map, .readOnly) == kCVReturnSuccess ? map : nil
+        }
+        defer { if let confidence { CVPixelBufferUnlockBaseAddress(confidence, .readOnly) } }
+        let plane = confidence.flatMap { map in
+            CVPixelBufferGetBaseAddress(map).map { ConfidencePlane(base: UnsafeRawPointer($0), bytesPerRow: CVPixelBufferGetBytesPerRow(map)) }
+        }
         return try encodeFrame(
-            metersBase: UnsafeRawPointer(base),
-            width: CVPixelBufferGetWidth(depthMap),
-            height: CVPixelBufferGetHeight(depthMap),
-            bytesPerRow: CVPixelBufferGetBytesPerRow(depthMap),
-            timestampMs: timestampMs,
-            frameIndex: frameIndex
+            metersBase: UnsafeRawPointer(base), width: width, height: height,
+            bytesPerRow: CVPixelBufferGetBytesPerRow(depthMap), confidence: plane,
+            timestampMs: timestampMs, frameIndex: frameIndex
         )
     }
 }

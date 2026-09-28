@@ -9,20 +9,35 @@ import { rawHttp, runCleanups, startTestRelay, TEST_HOST } from './relay-server-
 afterEach(runCleanups);
 
 describe('relay server pairing.json', () => {
-  it('advertises source/viewer URLs for the bound host with CORS', async () => {
+  it('advertises source/viewer URLs for the bound host, warning that loopback excludes the phone', async () => {
     const server = await startTestRelay();
     const res = await rawHttp(server.port, '/pairing.json');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/^application\/json/);
-    expect(res.headers['access-control-allow-origin']).toBe('*');
-    expect(JSON.parse(res.body)).toEqual({
+    expect(res.headers['access-control-allow-origin']).toBeUndefined(); // same-origin / native: no CORS needed
+    const body = JSON.parse(res.body) as Record<string, unknown>;
+    expect(body).toMatchObject({
       sourceUrls: [`ws://${TEST_HOST}:${server.port}/ws?role=source`],
       viewerUrls: [`ws://${TEST_HOST}:${server.port}/ws?role=viewer`],
       port: server.port,
     });
-    const preflight = await rawHttp(server.port, '/pairing.json', 'OPTIONS');
-    expect(preflight.status).toBe(204);
-    expect(preflight.headers['access-control-allow-origin']).toBe('*');
+    expect(body.warning).toMatch(/iPhone cannot connect/);
+  });
+
+  it('echoes CORS + Private Network Access only for allowed origins', async () => {
+    const server = await startTestRelay(null, { allowedOrigins: ['https://sand.example.org'] });
+    for (const origin of ['https://me.github.io', 'http://localhost:5173', 'https://sand.example.org']) {
+      const preflight = await rawHttp(server.port, '/pairing.json', 'OPTIONS', { Origin: origin, 'Access-Control-Request-Private-Network': 'true' });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers['access-control-allow-origin']).toBe(origin);
+      expect(preflight.headers['access-control-allow-private-network']).toBe('true');
+      expect((await rawHttp(server.port, '/pairing.json', 'GET', { Origin: origin })).status).toBe(200);
+    }
+    const evil = await rawHttp(server.port, '/pairing.json', 'GET', { Origin: 'https://evil.example' });
+    expect(evil.status).toBe(403);
+    expect(evil.headers['access-control-allow-origin']).toBeUndefined();
+    expect(evil.body).not.toContain('ws://');
+    expect((await rawHttp(server.port, '/pairing.json', 'OPTIONS', { Origin: 'https://evil.example' })).status).toBe(403);
   });
 
   it('uses LAN addresses when bound to all interfaces, else the request host', () => {
@@ -32,6 +47,8 @@ describe('relay server pairing.json', () => {
     expect(info.port).toBe(8787);
     expect(info.sourceUrls).toEqual(hosts.map((h) => `ws://${h}:8787/ws?role=source`));
     expect(info.viewerUrls).toEqual(hosts.map((h) => `ws://${h}:8787/ws?role=viewer`));
+    expect(buildPairingInfo('127.0.0.1', 8787).warning).toMatch(/only listens on 127\.0\.0\.1/);
+    expect(buildPairingInfo('192.168.1.20', 8787).warning).toBeUndefined();
   });
 });
 

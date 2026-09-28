@@ -1,8 +1,9 @@
 // Game status widgets: countdown pill, storm meter and one status chip per village.
 import type { VillageState } from '../core/types';
+import { peakStormRain } from '../game/level-definitions';
 import { formatClock, h, setHidden, setText, toggleClass } from './hud-dom-helpers';
 import { ICONS } from './hud-icons';
-import { peakStormRain, type HudSnapshot } from './hud-snapshot';
+import type { HudSnapshot } from './hud-snapshot';
 
 const icon = (svg: string): HTMLElement => h('span', { class: 'ls-icon', html: svg, attrs: { 'aria-hidden': 'true' } });
 
@@ -39,17 +40,16 @@ export class GameStatusBar {
   }
 
   update(s: HudSnapshot): void {
+    // Free play has no clock: the picker already says "Free play" and its own actions take this spot.
     const free = s.level.villages.length === 0 || !Number.isFinite(s.level.durationSec);
-    toggleClass(this.timer, 'is-free', free);
-    setHidden(this.timerMeter.root, free);
-    if (free) {
-      setText(this.timerText, 'Free play');
-    } else {
-      const left = Math.max(0, s.level.durationSec - s.elapsedSec);
+    setHidden(this.timer, free);
+    const left = free ? 0 : Math.max(0, s.level.durationSec - s.elapsedSec);
+    // Both flags are recomputed every frame so a level switch can never leave a stale grey or red pill behind.
+    toggleClass(this.timer, 'is-paused', !free && (s.phase === 'ready' || (s.paused && s.phase === 'running')));
+    toggleClass(this.timer, 'is-urgent', !free && !s.paused && s.phase === 'running' && left <= 10);
+    if (!free) {
       setText(this.timerText, formatClock(left));
       setFill(this.timerMeter.fill, left / s.level.durationSec);
-      toggleClass(this.timer, 'is-paused', s.phase === 'ready');
-      toggleClass(this.timer, 'is-urgent', s.phase === 'running' && left <= 10);
     }
     const peak = peakStormRain(s.level);
     setHidden(this.storm, peak <= 0);

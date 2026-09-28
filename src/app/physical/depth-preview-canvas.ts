@@ -64,7 +64,7 @@ export class FalseColorCanvas {
   private image: ImageData | null = null;
   private range: DepthRange | null = null;
 
-  constructor(className = 'ls-preview-canvas') {
+  constructor(className = 'lsp-preview-canvas') {
     this.canvas = document.createElement('canvas');
     this.canvas.className = className;
     this.ctx = this.canvas.getContext('2d');

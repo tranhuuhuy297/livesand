@@ -13,7 +13,9 @@ import {
   createFrameBindGroup,
   createFrameBindGroupLayout,
   packFrameUniforms,
+  sanitizeSources,
   sanitizeVillages,
+  type SourceMarker,
   type FrameView,
   type RendererGpu,
   type RendererSimSource,
@@ -33,6 +35,7 @@ export class Perspective3DRenderer {
   private readonly fallbackCamera: OrbitCamera;
   private style: RenderStyle = { ...DEFAULT_RENDER_STYLE };
   private villages: VillageMarker[] = [];
+  private sources: SourceMarker[] = [];
   private camera: { viewProj: Float32Array; invViewProj: Float32Array; eye: [number, number, number] } | null = null;
   private attachments: { width: number; height: number; depth: GPUTexture; color: GPUTexture } | null = null;
   private destroyed = false;
@@ -67,6 +70,10 @@ export class Perspective3DRenderer {
     this.villages = sanitizeVillages(markers);
   }
 
+  setSources(markers: readonly SourceMarker[]): void {
+    this.sources = sanitizeSources(markers);
+  }
+
   setCamera(viewProjection: Float32Array, eye: [number, number, number]): void {
     if (viewProjection.length < 16) throw new Error('setCamera expects a 4x4 column-major matrix');
     const viewProj = new Float32Array(viewProjection.subarray(0, 16));
@@ -81,7 +88,8 @@ export class Perspective3DRenderer {
     const w = Math.max(1, Math.floor(width) || 1);
     const h = Math.max(1, Math.floor(height) || 1);
     const { depth, color } = this.ensureAttachments(w, h);
-    packFrameUniforms(this.uniformData, this.sim.grid, this.style, this.villages, this.frameView(w, h));
+    const extras = { sources: this.sources, rotated: false };
+    packFrameUniforms(this.uniformData, this.sim.grid, this.style, this.villages, this.frameView(w, h), extras);
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
 
     const pass = encoder.beginRenderPass({
@@ -131,7 +139,7 @@ export class Perspective3DRenderer {
       viewportWidth: width,
       viewportHeight: height,
       fogStart: Math.hypot(cam.eye[0], cam.eye[1], cam.eye[2]) * 0.5,
-      fogDensity: 0.25 / span,
+      fogDensity: (0.25 / span) * (1 + 1.4 * this.style.stormLevel),
       baseY: (minHeight - 0.12 * Math.max(maxHeight - minHeight, 1)) * verticalScale,
     };
   }

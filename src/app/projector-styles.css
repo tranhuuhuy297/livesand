@@ -1,5 +1,6 @@
 /* Projector mode panel: small, dark, top-left; everything else on screen is the projected sandbox. */
-.ls-physical-ui { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+/* Physical UI (pairing, wizard) sits above the projector HUD so its overlays receive clicks. */
+.ls-physical-ui { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
 .ls-physical-ui > * { pointer-events: auto; }
 .ls-projector-hud { position: fixed; top: 16px; left: 16px; z-index: 30; display: grid; gap: 8px; width: min(380px, calc(100vw - 32px)); padding: 14px 16px; background: rgba(10, 14, 20, 0.88); }
 .ls-projector-head { display: flex; align-items: center; gap: 10px; font-size: 15px; }

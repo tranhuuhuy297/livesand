@@ -17,7 +17,7 @@ export class SaveSummaryStep implements WizardStep {
     const cal = this.ctx.buildCalibration();
     const { draft } = this.ctx;
     if (!cal) {
-      body.append(el('p', { className: 'ls-lead', text: 'Some steps are incomplete. Go back and finish them.' }));
+      body.append(el('p', { className: 'lsp-lead', text: 'Some steps are incomplete. Go back and finish them.' }));
       this.ctx.refresh();
       return;
     }
@@ -39,9 +39,9 @@ export class SaveSummaryStep implements WizardStep {
       ],
     ];
     body.append(
-      el('dl', 'ls-summary', rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })])),
+      el('dl', 'lsp-summary', rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })])),
       el('p', {
-        className: 'ls-tip',
+        className: 'lsp-tip',
         text: 'Saved in this browser and reused automatically next time. Recalibrate whenever the phone, the projector or the box moves.',
       }),
     );

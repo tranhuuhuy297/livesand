@@ -22,6 +22,7 @@ export function calibration(depthWidth = grid.width, depthHeight = grid.height, 
     handMarginMeters: 0.05,
     smoothing: 0.5,
     changeThreshold: 0.5,
+    spatialSigma: 0, // per-cell assertions below; the spatial blur has its own tests
     ...patch,
   };
 }

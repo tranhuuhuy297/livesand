@@ -2,6 +2,7 @@
 import { h } from './hud-dom-helpers';
 import { ICONS } from './hud-icons';
 import { HudModal } from './hud-modal';
+import { REAL_SANDBOX_ILLUSTRATION } from './real-sandbox-illustration';
 
 export const PROJECT_REPO_URL = 'https://github.com/tranhuuhuy297/livesand';
 
@@ -76,7 +77,7 @@ export function createRealSandboxDialog(onOpenProjector: () => void): HudModal {
   }, [h('span', { class: 'ls-icon', html: ICONS.book, attrs: { 'aria-hidden': 'true' } }), h('span', { class: 'ls-btn-label', text: 'Setup guide' })]);
 
   modal.body.append(
-    h('div', { class: 'ls-modal-hero', html: ICONS.projector }),
+    h('div', { class: 'ls-real-illustration', html: REAL_SANDBOX_ILLUSTRATION }),
     h('h2', { class: 'ls-modal-title', text: 'Play it on real sand' }),
     h('p', {
       class: 'ls-modal-lead',

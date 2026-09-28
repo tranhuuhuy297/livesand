@@ -111,13 +111,14 @@ private extension RelayConnectionState {
         case .connecting: return "Connecting…"
         case .connected: return "Connected"
         case let .reconnecting(seconds, reason): return "Retrying in \(String(format: "%.1f", seconds)) s: \(reason)"
+        case .stopped: return "Stopped by the relay"
         }
     }
 
     var displayColor: Color {
         switch self {
         case .idle: return .secondary
-        case .connecting, .reconnecting: return .orange
+        case .connecting, .reconnecting, .stopped: return .orange
         case .connected: return .green
         }
     }

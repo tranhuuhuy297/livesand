@@ -1,5 +1,6 @@
 // Versioned, validated persistence of the physical-mode calibration in localStorage.
 import { validateDepthCalibration } from '../../core/depth-calibration';
+import { MAX_DEPTH_SIDE } from '../../core/depth-frame-protocol';
 import type { GridSize, Quad } from '../../core/types';
 import { base64ToFloat32, float32ToBase64 } from './float32-base64-codec';
 import { toDepthCalibration, type PhysicalCalibration } from './physical-calibration-model';
@@ -7,7 +8,6 @@ import { copyQuad, isUsableQuad, readQuad } from './quad-geometry';
 
 export const CALIBRATION_STORAGE_KEY = 'livesand.physical-calibration';
 export const CALIBRATION_FORMAT_VERSION = 1;
-const MAX_DEPTH_SIDE = 16384;
 
 export type CalibrationStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 

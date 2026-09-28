@@ -49,6 +49,16 @@ export const appState = (page: Page): Promise<AppState> => page.evaluate(() => w
 export const stepFrames = (page: Page, n: number, dt: number): Promise<void> =>
   page.evaluate(([count, seconds]) => window.__livesand!.debug.stepFrames(count, seconds), [n, dt] as const);
 
+export const waterSum = (page: Page): Promise<number> =>
+  page.evaluate(async () => (await window.__livesand!.debug.readWater()).reduce((s, d) => s + d, 0));
+
+/** Dispatches a synthetic touch PointerEvent on the canvas (the app only listens to pointer events). */
+export const touchPointer = (page: Page, type: 'pointerdown' | 'pointermove' | 'pointerup', id: number, x: number, y: number): Promise<void> =>
+  page.evaluate(([t, pointerId, clientX, clientY]) => {
+    const init = { pointerId, pointerType: 'touch', clientX, clientY, button: t === 'pointermove' ? -1 : 0, isPrimary: pointerId === 1, bubbles: true, cancelable: true };
+    document.querySelector('canvas.ls-canvas')!.dispatchEvent(new PointerEvent(t, init));
+  }, [type, id, x, y] as const);
+
 export async function heightsDelta(page: Page, action: () => Promise<void>): Promise<{ changed: number; maxAbs: number }> {
   await page.evaluate(() => {
     (window as unknown as { __before: Float32Array }).__before = window.__livesand!.debug.getHeights();

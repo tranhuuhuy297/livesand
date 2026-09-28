@@ -20,8 +20,8 @@ export interface RangeField {
 
 export function rangeField(opts: RangeFieldOptions): RangeField {
   const attrs = { min: String(opts.min), max: String(opts.max), step: String(opts.step) };
-  const slider = el('input', { className: 'ls-range', attrs: { type: 'range', ...attrs, 'aria-label': opts.label, 'data-testid': `${opts.testId}-range` } });
-  const box = el('input', { className: 'ls-number', attrs: { type: 'number', ...attrs, 'aria-label': `${opts.label} (${opts.unit})`, 'data-testid': opts.testId } });
+  const slider = el('input', { className: 'lsp-range', attrs: { type: 'range', ...attrs, 'aria-label': opts.label, 'data-testid': `${opts.testId}-range` } });
+  const box = el('input', { className: 'lsp-number', attrs: { type: 'number', ...attrs, 'aria-label': `${opts.label} (${opts.unit})`, 'data-testid': opts.testId } });
   const setValue = (v: number): void => {
     slider.value = String(v);
     box.value = String(v);
@@ -46,13 +46,13 @@ export function rangeField(opts: RangeFieldOptions): RangeField {
     opts.onInput(clamped);
   });
   setValue(opts.value);
-  const root = el('label', 'ls-field', [
-    el('span', 'ls-field-head', [
-      el('span', { className: 'ls-field-label', text: opts.label }),
-      el('span', 'ls-field-value', [box, el('span', { className: 'ls-field-unit', text: opts.unit })]),
+  const root = el('label', 'lsp-field', [
+    el('span', 'lsp-field-head', [
+      el('span', { className: 'lsp-field-label', text: opts.label }),
+      el('span', 'lsp-field-value', [box, el('span', { className: 'lsp-field-unit', text: opts.unit })]),
     ]),
     slider,
-    opts.hint ? el('span', { className: 'ls-field-hint', text: opts.hint }) : null,
+    opts.hint ? el('span', { className: 'lsp-field-hint', text: opts.hint }) : null,
   ]);
   return { root, setValue };
 }

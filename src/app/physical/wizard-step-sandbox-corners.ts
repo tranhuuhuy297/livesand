@@ -37,11 +37,11 @@ export class SandboxCornersStep implements WizardStep {
 
   mount(body: HTMLElement): void {
     const { depthWidth: w, depthHeight: h } = this.ctx.draft;
-    const svg = svgEl('svg', { class: 'ls-roi-svg', viewBox: `0 0 ${w} ${h}`, preserveAspectRatio: 'none' });
-    this.mesh = svgEl('path', { class: 'ls-roi-mesh' });
-    this.outline = svgEl('polyline', { class: 'ls-roi-outline' });
+    const svg = svgEl('svg', { class: 'lsp-roi-svg', viewBox: `0 0 ${w} ${h}`, preserveAspectRatio: 'none' });
+    this.mesh = svgEl('path', { class: 'lsp-roi-mesh' });
+    this.outline = svgEl('polyline', { class: 'lsp-roi-outline' });
     svg.append(this.mesh, this.outline);
-    const stage = el('div', { className: 'ls-stage ls-stage--pick', attrs: { 'data-testid': 'roi-stage' } }, [this.preview.canvas, svg]);
+    const stage = el('div', { className: 'lsp-stage lsp-stage--pick', attrs: { 'data-testid': 'roi-stage' } }, [this.preview.canvas, svg]);
     stage.style.aspectRatio = `${w} / ${h}`;
     stage.style.width = `min(100%, calc(56vh * ${w / h}))`;
     stage.addEventListener('click', (e) => this.place(e));
@@ -60,25 +60,25 @@ export class SandboxCornersStep implements WizardStep {
       this.observer = new ResizeObserver(() => this.handles?.layout());
       this.observer.observe(stage);
     }
-    const bar = el('span', 'ls-legend-bar');
+    const bar = el('span', 'lsp-legend-bar');
     bar.style.background = DEPTH_GRADIENT_CSS;
     this.legendFar = el('span', { text: 'far' });
     this.legendNear = el('span', { text: 'near' });
-    this.items = CORNER_NAMES.map((name, i) => el('li', { className: 'ls-corner-item', attrs: { 'data-corner': String(i) } }, [
-      el('span', { className: `ls-corner-dot ls-corner-dot--${i}`, text: LABELS[i] }), name,
+    this.items = CORNER_NAMES.map((name, i) => el('li', { className: 'lsp-corner-item', attrs: { 'data-corner': String(i) } }, [
+      el('span', { className: `lsp-corner-dot lsp-corner-dot--${i}`, text: LABELS[i] }), name,
     ]));
-    body.append(el('div', 'ls-step-grid', [
-      el('div', 'ls-stage-col', [stage, el('div', 'ls-legend', [this.legendFar, bar, this.legendNear])]),
-      el('div', 'ls-side', [
-        el('p', { className: 'ls-lead', text: 'Click the four inside corners of the sandbox on the depth image, in this order:' }),
-        el('ol', 'ls-corner-list', this.items),
+    body.append(el('div', 'lsp-step-grid', [
+      el('div', 'lsp-stage-col', [stage, el('div', 'lsp-legend', [this.legendFar, bar, this.legendNear])]),
+      el('div', 'lsp-side', [
+        el('p', { className: 'lsp-lead', text: 'Click the four inside corners of the sandbox on the depth image, in this order:' }),
+        el('ol', 'lsp-corner-list', this.items),
         el('p', {
-          className: 'ls-tip',
+          className: 'lsp-tip',
           text: '“Top” is the edge where the top of the projected image should land. Drag a handle to fine-tune it, or focus it and nudge with the arrow keys (Shift = 10×).',
         }),
-        el('div', 'ls-row', [
-          button('Redo corners', () => this.clear(), 'ls-btn ls-btn--ghost'),
-          button('Use whole image', () => this.useWholeImage(), 'ls-btn ls-btn--ghost'),
+        el('div', 'lsp-row', [
+          button('Redo corners', () => this.clear(), 'lsp-btn lsp-btn--ghost'),
+          button('Use whole image', () => this.useWholeImage(), 'lsp-btn lsp-btn--ghost'),
         ]),
       ]),
     ]));
@@ -112,7 +112,7 @@ export class SandboxCornersStep implements WizardStep {
 
   private place(e: MouseEvent): void {
     const stage = this.stage;
-    if (!stage || (e.target as Element | null)?.closest('.ls-handle')) return;
+    if (!stage || (e.target as Element | null)?.closest('.lsp-handle')) return;
     const next = this.ctx.draft.roiCorners.findIndex((c) => c === null);
     if (next < 0) return;
     const r = stage.getBoundingClientRect();

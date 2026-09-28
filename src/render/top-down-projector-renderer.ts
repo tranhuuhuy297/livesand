@@ -10,7 +10,9 @@ import {
   createFrameBindGroup,
   createFrameBindGroupLayout,
   packFrameUniforms,
+  sanitizeSources,
   sanitizeVillages,
+  type SourceMarker,
   type RendererGpu,
   type RendererSimSource,
 } from './render-frame-uniforms';
@@ -24,6 +26,7 @@ export class TopDownProjectorRenderer {
   private readonly pipeline: GPURenderPipeline;
   private style: RenderStyle = { ...DEFAULT_RENDER_STYLE };
   private villages: VillageMarker[] = [];
+  private sources: SourceMarker[] = [];
   private destroyed = false;
 
   constructor(gpu: RendererGpu, sim: RendererSimSource) {
@@ -55,9 +58,14 @@ export class TopDownProjectorRenderer {
     this.villages = sanitizeVillages(markers);
   }
 
-  render(encoder: GPUCommandEncoder, target: GPUTextureView): void {
+  setSources(markers: readonly SourceMarker[]): void {
+    this.sources = sanitizeSources(markers);
+  }
+
+  /** `rotated` turns the map a quarter (north to the right) so portrait screens get a taller map. */
+  render(encoder: GPUCommandEncoder, target: GPUTextureView, rotated = false): void {
     if (this.destroyed) throw new Error('TopDownProjectorRenderer.render called after destroy()');
-    packFrameUniforms(this.uniformData, this.sim.grid, this.style, this.villages, null);
+    packFrameUniforms(this.uniformData, this.sim.grid, this.style, this.villages, null, { sources: this.sources, rotated });
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
     const pass = encoder.beginRenderPass({
       label: 'top-down projector pass',

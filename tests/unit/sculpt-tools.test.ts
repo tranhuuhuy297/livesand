@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GridSize } from '../../src/core/types';
-import { applySculptBrush, brushFalloff, paintRainBrush } from '../../src/input/sculpt-tools';
+import { buildVillageSculptFloor } from '../../src/game/village-sculpt-floor';
+import { STROKE_REFERENCE_SPEED, applySculptBrush, applySculptStroke, brushFalloff, paintRainBrush } from '../../src/input/sculpt-tools';
 
 const GRID: GridSize = { width: 40, height: 30 };
 const BOUNDS = { min: 0, max: 20 };
@@ -106,6 +107,61 @@ describe('applySculptBrush', () => {
     expect(applySculptBrush(h, GRID, Number.NaN, 15, 'raise', brush, 0.1, BOUNDS)).toBe(false);
     expect(h.every((v) => v === 5)).toBe(true);
     expect(() => applySculptBrush(new Float32Array(3), GRID, 1, 1, 'raise', brush, 0.1, BOUNDS)).toThrow(RangeError);
+  });
+});
+
+describe('applySculptStroke', () => {
+  /** Drags a lower brush from x=8 to x=32 along y=15 at `speed` cells/s in frames of `dt`, returning the heights. */
+  const drag = (speed: number, dt: number): Float32Array => {
+    const h = flat(10);
+    let last: { x: number; y: number } | null = null;
+    const frames = Math.ceil(24 / (speed * dt));
+    for (let i = 0; i <= frames; i++) {
+      const at = { x: 8 + (24 * i) / frames, y: 15 };
+      applySculptStroke(h, GRID, last, at, 'lower', brush, dt, BOUNDS);
+      last = at;
+    }
+    return h;
+  };
+
+  it('carves the same channel for a quick swipe as for a drag at the reference speed', () => {
+    const ref = drag(STROKE_REFERENCE_SPEED, 1 / 60);
+    const swipe = drag(STROKE_REFERENCE_SPEED * 6, 1 / 60);
+    const lowFps = drag(STROKE_REFERENCE_SPEED * 6, 1 / 8);
+    expect(10 - ref[idx(20, 15)]).toBeGreaterThan(3);
+    expect(swipe[idx(20, 15)]).toBeCloseTo(ref[idx(20, 15)], 0);
+    expect(lowFps[idx(20, 15)]).toBeCloseTo(ref[idx(20, 15)], 0);
+    // No gaps between low-fps stamps along the path.
+    for (let x = 12; x <= 28; x++) expect(10 - lowFps[idx(x, 15)]).toBeGreaterThan(3);
+  });
+
+  it('keeps time-based digging when holding still or dragging slowly, and treats long jumps as a single stamp', () => {
+    const still = flat(10);
+    expect(applySculptStroke(still, GRID, null, { x: 20, y: 15 }, 'lower', brush, 0.1, BOUNDS)).toBe(true);
+    expect(still[idx(20, 15)]).toBeCloseTo(9);
+    const slow = flat(10);
+    applySculptStroke(slow, GRID, { x: 20, y: 15 }, { x: 20.1, y: 15 }, 'lower', brush, 0.1, BOUNDS);
+    expect(slow[idx(20, 15)]).toBeCloseTo(9, 1);
+    const jump = flat(10);
+    applySculptStroke(jump, GRID, { x: -60, y: 15 }, { x: 20, y: 15 }, 'lower', brush, 0.1, BOUNDS);
+    expect(jump[idx(20, 15)]).toBeCloseTo(9);
+    expect(jump[idx(8, 15)]).toBe(10);
+  });
+
+  it('never digs village ground below its floor but still lets it be built up', () => {
+    const h = flat(10);
+    const floor = buildVillageSculptFloor(h, GRID, [{ x: 20, y: 15, radius: 3 }]);
+    expect(floor).not.toBeNull();
+    expect(buildVillageSculptFloor(h, GRID, [])).toBeNull();
+    const bounds = { ...BOUNDS, floor };
+    applySculptStroke(h, GRID, { x: 8, y: 15 }, { x: 32, y: 15 }, 'lower', brush, 1, bounds);
+    expect(h[idx(20, 15)]).toBe(10);
+    expect(h[idx(24, 15)]).toBe(10);
+    expect(h[idx(12, 15)]).toBeLessThan(9);
+    applySculptBrush(h, GRID, 20, 15, 'raise', brush, 0.1, bounds);
+    expect(h[idx(20, 15)]).toBeCloseTo(11);
+    applySculptBrush(h, GRID, 20, 15, 'lower', brush, 5, bounds);
+    expect(h[idx(20, 15)]).toBe(10);
   });
 });
 

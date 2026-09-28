@@ -25,9 +25,19 @@ export interface FrameView {
   baseY: number;
 }
 
+/** Spring marker drawn as expanding ripples (grid coordinates). */
+export interface SourceMarker {
+  x: number;
+  y: number;
+  radius: number;
+}
+
 export const MAX_VILLAGES = 16;
-export const FRAME_UNIFORM_FLOATS = 180;
+export const MAX_SOURCES = 8;
+export const FRAME_UNIFORM_FLOATS = 216;
 export const FRAME_UNIFORM_BYTES = FRAME_UNIFORM_FLOATS * 4;
+/** Shader time wraps so f32 time (and everything animated by it) keeps full precision on all-day exhibits. */
+export const SHADER_TIME_WRAP_SEC = 1200;
 
 // Float offsets matching struct Frame in sim-sampling-shaders.ts.
 const VIEW_PROJ = 0;
@@ -37,8 +47,10 @@ const GRID = 36;
 const HEIGHT_STYLE = 40;
 const MISC = 44;
 const VIEWPORT = 48;
-const VILLAGES = 52;
+const EFFECTS = 52;
+const VILLAGES = 56;
 const VILLAGE_INFO = VILLAGES + MAX_VILLAGES * 4;
+const SOURCES = VILLAGE_INFO + MAX_VILLAGES * 4;
 
 const STATE_CODE: Record<VillageState, number> = { safe: 0, flooding: 1, lost: 2 };
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -51,12 +63,24 @@ export function sanitizeVillages(markers: readonly VillageMarker[]): VillageMark
     .map((m) => ({ ...m, flood01: Number.isFinite(m.flood01) ? Math.min(1, Math.max(0, m.flood01)) : 0 }));
 }
 
+/** Copies at most MAX_SOURCES finite spring markers. */
+export function sanitizeSources(markers: readonly SourceMarker[]): SourceMarker[] {
+  return markers.filter((m) => Number.isFinite(m.x) && Number.isFinite(m.y) && Number.isFinite(m.radius) && m.radius > 0).slice(0, MAX_SOURCES);
+}
+
+/** Per-frame extras that are not part of the render style: springs and the quarter-turned 2D map. */
+export interface FrameExtras {
+  sources: readonly SourceMarker[];
+  rotated: boolean;
+}
+
 export function packFrameUniforms(
   out: Float32Array,
   grid: GridSize,
   style: RenderStyle,
   villages: readonly VillageMarker[],
   view: FrameView | null,
+  extras: FrameExtras = { sources: [], rotated: false },
 ): Float32Array {
   out.fill(0);
   out.set(view ? view.viewProj : IDENTITY, VIEW_PROJ);
@@ -66,8 +90,16 @@ export function packFrameUniforms(
   const maxHeight = style.maxHeight > style.minHeight ? style.maxHeight : style.minHeight + 1;
   out.set([style.minHeight, maxHeight, style.contourInterval, style.verticalScale], HEIGHT_STYLE);
   const count = Math.min(villages.length, MAX_VILLAGES);
-  out.set([style.showHillshade ? 1 : 0, style.timeSec, count, view ? view.baseY : 0], MISC);
+  const time = Number.isFinite(style.timeSec) ? ((style.timeSec % SHADER_TIME_WRAP_SEC) + SHADER_TIME_WRAP_SEC) % SHADER_TIME_WRAP_SEC : 0;
+  out.set([style.showHillshade ? 1 : 0, time, count, view ? view.baseY : 0], MISC);
   if (view) out.set([view.viewportWidth, view.viewportHeight, view.fogStart, view.fogDensity], VIEWPORT);
+  const sources = Math.min(extras.sources.length, MAX_SOURCES);
+  const storm = Math.min(1, Math.max(0, style.stormLevel));
+  out.set([style.seaLevel, storm, sources, extras.rotated ? 1 : 0], EFFECTS);
+  for (let i = 0; i < sources; i++) {
+    const s = extras.sources[i];
+    out.set([s.x, s.y, s.radius, 0], SOURCES + i * 4);
+  }
   for (let i = 0; i < count; i++) {
     const v = villages[i];
     out.set([v.x, v.y, v.radius, STATE_CODE[v.state] ?? 0], VILLAGES + i * 4);

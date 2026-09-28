@@ -1,0 +1,40 @@
+name: Bug report
+description: Something is broken in the web app, the relay or the iOS depth app.
+labels: [bug]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options:
+        - Virtual mode (browser only)
+        - Projector mode / calibration
+        - Relay (npx livesand)
+        - iOS depth app
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Steps to reproduce help a lot. A screenshot or short clip is even better.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser, OS and GPU
+      placeholder: Chrome 140 on Windows 11, RTX 3060 / Safari 26 on macOS, M2
+    validations:
+      required: true
+  - type: textarea
+    id: webgpu
+    attributes:
+      label: Error text or console output
+      description: The error screen text, or anything red in the browser console (F12). For the relay, paste the terminal output.
+      render: text
+  - type: input
+    id: hardware
+    attributes:
+      label: Physical setup (if any)
+      placeholder: iPhone 13 Pro, 1080p projector, 100 x 75 cm box

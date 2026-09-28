@@ -18,7 +18,7 @@ export class ProjectorKeystoneStep implements WizardStep {
     const surface = this.ctx.host.keystoneSurface;
     if (!surface.element) {
       body.append(el('p', {
-        className: 'ls-lead',
+        className: 'lsp-lead',
         text: 'No projector view is attached in this window, so there is nothing to align. Continue to save.',
       }));
       this.ctx.refresh();
@@ -30,15 +30,15 @@ export class ProjectorKeystoneStep implements WizardStep {
     this.editor.open(this.ctx.draft.keystone);
     body.append(
       el('p', {
-        className: 'ls-lead',
+        className: 'lsp-lead',
         text: 'Drag each coloured corner of the projected grid onto the matching corner of the sandbox.',
       }),
       el('p', {
-        className: 'ls-tip',
+        className: 'lsp-tip',
         text: 'Click a corner handle, then use the arrow keys for 1 px nudges (Shift = 10 px). The grid shows where the terrain will be drawn.',
       }),
-      el('div', 'ls-row', [
-        button('Reset corners', () => this.editor?.reset(), 'ls-btn ls-btn--ghost'),
+      el('div', 'lsp-row', [
+        button('Reset corners', () => this.editor?.reset(), 'lsp-btn lsp-btn--ghost'),
       ]),
     );
     this.ctx.refresh();

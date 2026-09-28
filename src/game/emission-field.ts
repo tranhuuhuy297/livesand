@@ -65,3 +65,14 @@ export function buildEmissionField(
   for (const source of sources) stampSource(field, grid, source);
   return field;
 }
+
+/** Spring positions in grid cells, for drawing their markers. */
+export function sourceMarkers(grid: GridSize, sources: readonly WaterSourceSpec[]): { x: number; y: number; radius: number }[] {
+  return sources
+    .filter((s) => nonNegative(s.rate) > 0 && Number.isFinite(s.u) && Number.isFinite(s.v))
+    .map((s) => ({
+      x: layoutToCell(s.u, grid.width),
+      y: layoutToCell(s.v, grid.height),
+      radius: Math.max(MIN_SOURCE_RADIUS_CELLS, nonNegative(s.radius) * Math.max(1, grid.width - 1)),
+    }));
+}

@@ -15,7 +15,7 @@ struct DepthStreamStats: Equatable, Sendable {
 enum DepthStreamerEvent: Sendable {
     case stats(DepthStreamStats)
     case notice(String?)  // transient AR status; nil clears it
-    case failed(String)   // the AR session stopped for good
+    case failed(String, recoverable: Bool)  // the AR session stopped; recoverable ones are worth re-running
 }
 
 /// Runs ARKit scene depth and forwards throttled LSD1 frames to the relay client.
@@ -80,11 +80,11 @@ final class LidarDepthStreamer: NSObject, ARSessionDelegate, @unchecked Sendable
         guard captureTime - lastAcceptedAt >= frameInterval - 0.005 else { return }
         lastAcceptedAt = captureTime
         // Copy what we need and let the ARFrame go: holding frames starves ARKit's buffer pool.
-        guard let depthMap = (frame.smoothedSceneDepth ?? frame.sceneDepth)?.depthMap else { return }
-        stats.depthWidth = CVPixelBufferGetWidth(depthMap)
-        stats.depthHeight = CVPixelBufferGetHeight(depthMap)
+        guard let depth = frame.smoothedSceneDepth ?? frame.sceneDepth else { return }
+        stats.depthWidth = CVPixelBufferGetWidth(depth.depthMap)
+        stats.depthHeight = CVPixelBufferGetHeight(depth.depthMap)
         if client.isReadyToSend {
-            send(depthMap, captureTime: captureTime)
+            send(depth.depthMap, confidenceMap: depth.confidenceMap, captureTime: captureTime)
         } else {
             stats.framesDropped += 1
         }
@@ -92,13 +92,14 @@ final class LidarDepthStreamer: NSObject, ARSessionDelegate, @unchecked Sendable
     }
 
     func session(_ session: ARSession, didFailWithError error: Error) {
-        let message: String
-        if let arError = error as? ARError, arError.code == .cameraUnauthorized {
-            message = "Camera access is off. Allow it in Settings to stream depth."
+        let code = (error as? ARError)?.code
+        if code == .cameraUnauthorized {
+            events.send(.failed("Camera access is off. Allow it in Settings to stream depth.", recoverable: false))
         } else {
-            message = "AR session failed: \(error.localizedDescription)"
+            // Sensor or tracking hiccups often clear after a restart; only a missing capability never will.
+            let recoverable = code != .unsupportedConfiguration
+            events.send(.failed("AR session failed: \(error.localizedDescription)", recoverable: recoverable))
         }
-        events.send(.failed(message))
     }
 
     func sessionWasInterrupted(_ session: ARSession) {
@@ -111,10 +112,11 @@ final class LidarDepthStreamer: NSObject, ARSessionDelegate, @unchecked Sendable
 
     // MARK: - Queue-confined internals
 
-    private func send(_ depthMap: CVPixelBuffer, captureTime: TimeInterval) {
+    private func send(_ depthMap: CVPixelBuffer, confidenceMap: CVPixelBuffer?, captureTime: TimeInterval) {
         do {
             let data = try DepthFrameEncoder.encode(
                 depthMap: depthMap,
+                confidenceMap: confidenceMap,
                 timestampMs: Self.epochMilliseconds(fromUptime: captureTime),
                 frameIndex: frameIndex
             )

@@ -39,9 +39,9 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
     await expect(page.getByTestId('pairing-panel')).toBeVisible();
     await expect(page.getByTestId('pairing-status')).toContainText('Relay connected', { timeout: 10_000 });
     await expect(page.getByTestId('pairing-qr')).not.toHaveClass(/is-loading/, { timeout: 10_000 });
-    expect(await page.locator('.ls-qr-img').getAttribute('src')).toMatch(/^data:image\/png;base64,/);
-    await expect(page.locator('.ls-url')).toHaveText(relayWs('source'));
-    await expect(page.locator('.ls-cmd')).toContainText(`fake-source --url ${relayWs('source')}`);
+    expect(await page.locator('.lsp-qr-img').getAttribute('src')).toMatch(/^data:image\/png;base64,/);
+    await expect(page.locator('.lsp-url')).toHaveText(relayWs('source'));
+    await expect(page.locator('.lsp-cmd')).toContainText(`fake-source --url ${relayWs('source')}`);
     await page.screenshot({ path: `${SCREENS_DIR}physical-pairing.png` });
   });
 
@@ -56,7 +56,7 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
     for (const [fx, fy] of [[0.05, 0.06], [0.95, 0.05], [0.96, 0.95], [0.04, 0.94]]) {
       await page.mouse.click(box.x + fx * box.width, box.y + fy * box.height);
     }
-    await expect(page.locator('.ls-corner-item.is-done')).toHaveCount(4);
+    await expect(page.locator('.lsp-corner-item.is-done')).toHaveCount(4);
     await expect(page.getByTestId('wizard-next')).toBeEnabled();
     await page.screenshot({ path: `${SCREENS_DIR}physical-wizard.png` });
   });
@@ -73,15 +73,15 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
     await expect(wizard(page)).toHaveAttribute('data-step', '2');
     await page.getByTestId('box-width').fill('120');
     await page.getByTestId('box-width').press('Tab');
-    await expect(page.locator('.ls-derived')).toContainText('1 cm of sand = 2.13 height units');
+    await expect(page.locator('.lsp-derived')).toContainText('1 cm of sand = 2.13 height units');
     await page.waitForTimeout(600); // let a few processed frames reach the terrain preview
     await page.screenshot({ path: `${SCREENS_DIR}physical-wizard-relief.png` });
     await page.getByTestId('wizard-next').click();
 
     await expect(wizard(page)).toHaveAttribute('data-step', '3');
-    await expect(page.locator('.ls-keystone-grid')).toBeVisible();
-    await dragBy(page, '.ls-keystone-layer .ls-handle[data-corner="0"]', 70, 45);
-    await dragBy(page, '.ls-keystone-layer .ls-handle[data-corner="2"]', -50, -35);
+    await expect(page.locator('.lsp-keystone-grid')).toBeVisible();
+    await dragBy(page, '.lsp-keystone-layer .lsp-handle[data-corner="0"]', 70, 45);
+    await dragBy(page, '.lsp-keystone-layer .lsp-handle[data-corner="2"]', -50, -35);
     const transform = await page.locator('#surface').evaluate((el) => el.style.transform);
     expect(transform).toContain('matrix3d');
     await page.screenshot({ path: `${SCREENS_DIR}physical-keystone.png` });
@@ -131,7 +131,7 @@ test('pairing, calibration wizard and live terrain from a fake depth source', as
     await page.evaluate(() => (window as TestWindow).__livesandPhysical!.openCalibration());
     await expect(wizard(page)).toHaveAttribute('data-step', '0');
     await expect(page.getByTestId('wizard-live')).toHaveText('Live depth');
-    await expect(page.locator('.ls-corner-item.is-done')).toHaveCount(4);
+    await expect(page.locator('.lsp-corner-item.is-done')).toHaveCount(4);
     await page.getByTestId('wizard-next').click();
     await expect(page.getByTestId('capture-result')).toContainText('saved reference');
     await expect(page.getByTestId('wizard-next')).toBeEnabled();
@@ -160,7 +160,7 @@ test('the pairing panel explains an unreachable relay and keeps retrying', async
   await openHarness(page, `ws://127.0.0.1:${deadPort}/ws?role=viewer`);
   await expect(page.getByTestId('pairing-panel')).toBeVisible();
   await expect(page.getByTestId('pairing-status')).toContainText("Can't reach the relay", { timeout: 10_000 });
-  await expect(page.locator('.ls-relay-note')).toContainText('Is the relay running?', { timeout: 10_000 });
+  await expect(page.locator('.lsp-relay-note')).toContainText('Is the relay running?', { timeout: 10_000 });
   expect(await status(page)).toMatchObject({ connected: false, sources: 0, fps: 0, calibrated: false });
   await page.screenshot({ path: `${SCREENS_DIR}physical-pairing-offline.png` });
 });

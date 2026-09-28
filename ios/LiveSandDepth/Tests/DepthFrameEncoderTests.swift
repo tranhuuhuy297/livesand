@@ -44,6 +44,32 @@ final class DepthFrameEncoderTests: XCTestCase {
         XCTAssertEqual(samples, [1000, 0, 250, 0, 0, 1500])
     }
 
+    func testLowConfidencePixelsAreSentAsInvalid() throws {
+        let meters: [Float32] = [1.0, 1.1, 1.2, 1.3]
+        let confidence: [UInt8] = [2, 0, 9, 9, 1, 0, 9, 9]  // rows: high, low | medium, low (+2 padding bytes each)
+        let frame = try meters.withUnsafeBytes { depth in
+            try confidence.withUnsafeBytes { conf in
+                try DepthFrameEncoder.encodeFrame(
+                    metersBase: depth.baseAddress!, width: 2, height: 2, bytesPerRow: 8,
+                    confidence: .init(base: conf.baseAddress!, bytesPerRow: 4), timestampMs: 0, frameIndex: 0
+                )
+            }
+        }
+        let payload = Array(frame.dropFirst(DepthFrameEncoder.headerByteCount))
+        let samples = stride(from: 0, to: payload.count, by: 2).map { UInt16(payload[$0]) | UInt16(payload[$0 + 1]) << 8 }
+        XCTAssertEqual(samples, [1000, 0, 1200, 0])
+    }
+
+    func testRejectsConfidenceRowsShorterThanWidth() {
+        let raw = [UInt8](repeating: 0, count: 64)
+        XCTAssertThrowsError(try raw.withUnsafeBytes { buffer in
+            try DepthFrameEncoder.encodeFrame(
+                metersBase: buffer.baseAddress!, width: 4, height: 2, bytesPerRow: 16,
+                confidence: .init(base: buffer.baseAddress!, bytesPerRow: 3), timestampMs: 0, frameIndex: 0
+            )
+        })
+    }
+
     func testRejectsRowsShorterThanWidth() {
         let raw = [UInt8](repeating: 0, count: 64)
         XCTAssertThrowsError(try raw.withUnsafeBytes { buffer in

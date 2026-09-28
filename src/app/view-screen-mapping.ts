@@ -12,6 +12,8 @@ export interface ViewGeometry {
   camera: OrbitCamera;
   verticalScale: number;
   heights: Float32Array;
+  /** 2D map turned a quarter for portrait screens (west at the top, north on the right). */
+  rotated?: boolean;
 }
 
 /** Grid point under a client pixel; in 3D the ray is intersected with the heightfield (null when it misses). */
@@ -22,7 +24,8 @@ export function screenToGrid(g: ViewGeometry, clientX: number, clientY: number):
   const v = (clientY - rect.top) / rect.height;
   if (g.view === '2d') {
     // Matches the top-down shader: pixel uv * grid - 0.5 is the cell-centre coordinate.
-    return { x: u * grid.width - 0.5, y: v * grid.height - 0.5 };
+    const [gu, gv] = g.rotated ? [v, 1 - u] : [u, v];
+    return { x: gu * grid.width - 0.5, y: gv * grid.height - 0.5 };
   }
   const ray = g.camera.rayFromScreen(u * 2 - 1, 1 - v * 2, rect.width / rect.height);
   return pickHeightfield(g.heights, grid, g.verticalScale, ray);
@@ -32,7 +35,10 @@ export function screenToGrid(g: ViewGeometry, clientX: number, clientY: number):
 export function gridToScreen(g: ViewGeometry, viewProj: Float32Array | null, gx: number, gy: number, h: number): Vec2 | null {
   const { rect, grid } = g;
   if (g.view === '2d' || !viewProj) {
-    return { x: rect.left + ((gx + 0.5) / grid.width) * rect.width, y: rect.top + ((gy + 0.5) / grid.height) * rect.height };
+    const gu = (gx + 0.5) / grid.width;
+    const gv = (gy + 0.5) / grid.height;
+    const [u, v] = g.rotated ? [1 - gv, gu] : [gu, gv];
+    return { x: rect.left + u * rect.width, y: rect.top + v * rect.height };
   }
   const [x, y, z] = gridToWorld(grid, gx, gy, h, g.verticalScale);
   const m = viewProj;

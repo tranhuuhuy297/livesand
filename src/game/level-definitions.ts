@@ -38,6 +38,8 @@ export interface LevelDefinition {
   storm: StormKeyframe[];
   floodDepthThreshold: number;
   floodSecondsToLose: number;
+  /** Seconds of spring flow simulated at load, so rivers already run under the briefing card. */
+  prefillSec?: number;
 }
 
 const edges = (open: Partial<EdgeFlags>): EdgeFlags => ({ north: false, east: false, south: false, west: false, ...open });
@@ -51,10 +53,11 @@ export const LEVELS: LevelDefinition[] = [
     villages: [{ ...RV.village, radius: 0.03, name: 'Millbrook' }],
     sources: [{ ...RV.spring, radius: 0.016, rate: 0.6 }],
     openEdges: edges({ east: true }),
-    durationSec: 90,
+    durationSec: 60,
     storm: [],
     floodDepthThreshold: 0.5,
     floodSecondsToLose: 20,
+    prefillSec: 12,
   },
   {
     id: 'twin-towns',
@@ -74,6 +77,7 @@ export const LEVELS: LevelDefinition[] = [
     storm: [],
     floodDepthThreshold: 0.5,
     floodSecondsToLose: 15,
+    prefillSec: 8,
   },
   {
     id: 'flash-flood',
@@ -101,25 +105,64 @@ export const LEVELS: LevelDefinition[] = [
     ],
     floodDepthThreshold: 0.5,
     floodSecondsToLose: 15,
+    prefillSec: 10,
   },
 ];
 
-export const SANDBOX_LEVEL: LevelDefinition = {
-  id: 'sandbox',
-  name: 'Sandbox',
+const freePlay = (recipe: TerrainRecipe, sources: WaterSourceSpec[], openEdges: EdgeFlags, id = 'sandbox'): LevelDefinition => ({
+  id,
+  name: 'Free play',
   tagline: 'Free play: sculpt mountains, dig rivers and make it rain.',
-  recipe: { kind: 'flat', seed: 1 },
+  recipe,
   villages: [],
-  sources: [],
-  openEdges: edges({}),
+  sources,
+  openEdges,
   durationSec: Infinity,
   storm: [],
   floodDepthThreshold: 0.5,
   floodSecondsToLose: 15,
+  prefillSec: sources.length > 0 ? 12 : 0,
+});
+
+const spring = (at: { u: number; v: number }, rate: number): WaterSourceSpec => ({ ...at, radius: 0.015, rate });
+
+/** Free-play landscapes: the level terrains with gentle springs and no villages, so there is living water to play with. */
+const FREE_PLAY_LANDS: ((seed: number) => LevelDefinition)[] = [
+  (seed) => freePlay({ kind: 'river-valley', seed }, [spring(RV.spring, 0.4)], edges({ east: true })),
+  (seed) => freePlay({ kind: 'twin-valleys', seed }, [spring(TV.westSpring, 0.35), spring(TV.eastSpring, 0.35)], edges({ south: true })),
+  (seed) => freePlay({ kind: 'mountain-basin', seed }, [spring(MB.westSpring, 0.3), spring(MB.eastSpring, 0.3)], edges({ south: true })),
+];
+
+export const FREE_PLAY_LAND_COUNT = FREE_PLAY_LANDS.length;
+
+/** Free-play landscape `index` (wrapped) with its own noise seed; id stays 'sandbox' for the picker and URL. */
+export function freePlayLevel(index: number, seed: number): LevelDefinition {
+  const n = FREE_PLAY_LANDS.length;
+  return FREE_PLAY_LANDS[((Math.trunc(index) % n) + n) % n](Math.trunc(seed));
+}
+
+export const SANDBOX_LEVEL: LevelDefinition = freePlayLevel(0, 1107);
+
+/** Flat closed box without springs: a blank canvas, and projector mode's free play on real sand. */
+export const BLANK_SANDBOX_LEVEL: LevelDefinition = {
+  ...freePlay({ kind: 'flat', seed: 1 }, [], edges({}), 'blank'),
+  name: 'Blank sand',
+  tagline: 'A flat, empty box: build everything yourself.',
 };
 
-/** Looks up a level by id ('sandbox' included); unknown ids fall back to the first level. */
+/** Looks up a level by id ('sandbox' and 'blank' included); unknown ids fall back to the first level. */
 export function getLevel(id: string): LevelDefinition {
   if (id === SANDBOX_LEVEL.id) return SANDBOX_LEVEL;
+  if (id === BLANK_SANDBOX_LEVEL.id) return BLANK_SANDBOX_LEVEL;
   return LEVELS.find((level) => level.id === id) ?? LEVELS[0];
+}
+
+/** Highest storm rain of a level (0 when it has no storm), used to scale the storm meter and visuals. */
+export function peakStormRain(level: LevelDefinition): number {
+  return level.storm.reduce((max, k) => Math.max(max, k.rain), 0);
+}
+
+/** Whether a level is free play (no villages, no clock). */
+export function isFreePlay(level: LevelDefinition): boolean {
+  return level.villages.length === 0;
 }

@@ -1,21 +1,18 @@
 import Combine
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
-/// Streams binary frames to the relay over one WebSocket: at most one send in flight, auto-reconnect with backoff.
+/// Streams binary frames to the relay over one WebSocket, paced by relay acks, reconnecting with backoff.
 ///
 /// Thread-safety: every mutable property is confined to `queue`; public methods hop onto it.
 final class RelayWebSocketClient: @unchecked Sendable {
     /// Emits on the client's private queue; subscribers should `receive(on:)` their own scheduler.
     let stateChanges = PassthroughSubject<RelayConnectionState, Never>()
 
-    private let queue: DispatchQueue
+    private let queue = DispatchQueue(label: "io.livesand.depth.relay", qos: .userInitiated)
     private let watchdog: DispatchSourceTimer
-    private let initialBackoff: TimeInterval = 0.5
-    private let maxBackoff: TimeInterval = 10
-    private let connectTimeout: TimeInterval = 8
-    private let sendStallTimeout: TimeInterval = 5
-    private let pingInterval: TimeInterval = 5
-
     private var url: URL?
     private var wantsConnection = false
     private var session: URLSession?
@@ -23,14 +20,11 @@ final class RelayWebSocketClient: @unchecked Sendable {
     private var connectionID = 0  // bumped on every open/close so late callbacks from old sockets are ignored
     private var state: RelayConnectionState = .idle
     private var stateSince: TimeInterval = 0
-    private var reconnectAttempt = 0
-    private var sendInFlight = false
-    private var sendStartedAt: TimeInterval = 0
+    private var backoff = ReconnectBackoff()
+    private var window = FrameSendWindow()
     private var lastPingAt: TimeInterval = 0
 
     init() {
-        let queue = DispatchQueue(label: "io.livesand.depth.relay", qos: .userInitiated)
-        self.queue = queue
         watchdog = DispatchSource.makeTimerSource(queue: queue)
         watchdog.schedule(deadline: .now() + 1, repeating: 1)
         watchdog.setEventHandler { [weak self] in self?.tick() }
@@ -47,7 +41,7 @@ final class RelayWebSocketClient: @unchecked Sendable {
         queue.async {
             self.url = url
             self.wantsConnection = true
-            self.reconnectAttempt = 0
+            self.backoff.reset()
             self.openSocket()
         }
     }
@@ -62,15 +56,14 @@ final class RelayWebSocketClient: @unchecked Sendable {
 
     /// Cheap pre-check so callers can skip encoding a frame that would be dropped anyway.
     var isReadyToSend: Bool {
-        queue.sync { state == .connected && !sendInFlight }
+        queue.sync { state == .connected && window.canSend }
     }
 
-    /// Sends one binary message; returns false (frame dropped) when not connected or a send is still in flight.
+    /// Sends one binary message; returns false (frame dropped) when not connected or the send window is full.
     func send(_ frame: Data) -> Bool {
         queue.sync { () -> Bool in
-            guard state == .connected, !sendInFlight, let task else { return false }
-            sendInFlight = true
-            sendStartedAt = Self.now()
+            guard state == .connected, window.canSend, let task else { return false }
+            window.didStartSend(at: Self.now())
             let id = connectionID
             task.send(.data(frame)) { [weak self] error in
                 guard let self else { return }
@@ -81,8 +74,7 @@ final class RelayWebSocketClient: @unchecked Sendable {
         }
     }
 
-    // MARK: - Socket lifecycle (from RelaySocketDelegateProxy, any thread)
-
+    /// From RelaySocketDelegateProxy, on any thread.
     func socketDidOpen(_ socket: URLSessionTask) {
         queue.async {
             guard socket === self.task else { return }
@@ -90,14 +82,12 @@ final class RelayWebSocketClient: @unchecked Sendable {
         }
     }
 
-    func socketDidEnd(_ socket: URLSessionTask, reason: String) {
+    func socketDidEnd(_ socket: URLSessionTask, reason: String, closeCode: Int? = nil) {
         queue.async {
             guard socket === self.task else { return }
-            self.handleDrop(reason: reason)
+            self.handleDrop(reason: reason, closeCode: closeCode)
         }
     }
-
-    // MARK: - Queue-confined internals
 
     private func openSocket() {
         closeSocket()
@@ -116,37 +106,42 @@ final class RelayWebSocketClient: @unchecked Sendable {
 
     private func closeSocket() {
         connectionID &+= 1
-        sendInFlight = false
+        window.reset()
         task?.cancel(with: .goingAway, reason: nil)
         session?.finishTasksAndInvalidate()  // one session per connection; invalidation frees its delegate
         task = nil
         session = nil
     }
 
-    /// Sources never expect messages, but a pending receive is what surfaces a closed/broken socket.
+    /// Reads relay acks; a pending receive is also what surfaces a closed or broken socket.
     private func receiveNext(on task: URLSessionWebSocketTask, connectionID id: Int) {
         task.receive { [weak self] result in
             guard let self else { return }
-            let reason: String?
-            if case .failure(let error) = result { reason = error.localizedDescription } else { reason = nil }
+            let (text, failure) = (result.textMessage, result.failureDescription)
+            let closeCode = task.closeCode.rawValue  // a relay close frame can surface here before the delegate
             self.queue.async {
                 guard id == self.connectionID else { return }
-                if let reason { self.handleDrop(reason: reason) } else { self.receiveNext(on: task, connectionID: id) }
+                if let failure { return self.handleDrop(reason: failure, closeCode: closeCode) }
+                if let text, let message = RelayControlMessage.parse(text) { self.window.handle(message) }
+                self.receiveNext(on: task, connectionID: id)
             }
         }
     }
 
     private func finishSend(connectionID id: Int, failure: String?) {
         guard id == connectionID else { return }
-        sendInFlight = false
-        if let failure { handleDrop(reason: failure) }
+        if let failure { return handleDrop(reason: failure) }
+        window.didHandOffToTransport()
     }
 
-    private func handleDrop(reason: String) {
+    private func handleDrop(reason: String, closeCode: Int? = nil) {
         closeSocket()
         guard wantsConnection else { return publish(.idle) }
-        let delay = min(maxBackoff, initialBackoff * pow(2, Double(reconnectAttempt)))
-        reconnectAttempt = min(reconnectAttempt + 1, 10)
+        if closeCode == RelayCloseCode.replacedByNewerSource {
+            wantsConnection = false  // retrying would take the relay back from the new source, forever
+            return publish(.stopped(reason: "Another depth source connected to the relay and took over. Tap Start to take it back."))
+        }
+        let delay = backoff.nextDelay()
         publish(.reconnecting(inSeconds: delay, reason: reason))
         let id = connectionID
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
@@ -155,19 +150,18 @@ final class RelayWebSocketClient: @unchecked Sendable {
         }
     }
 
-    /// 1 Hz: connect timeout, stalled-send detection, keepalive pings, backoff reset after a stable link.
+    /// 1 Hz: connect timeout, stalled-frame detection, keepalive pings, backoff reset after a stable link.
     private func tick() {
         let now = Self.now()
         switch state {
-        case .connecting where now - stateSince > connectTimeout:
+        case .connecting where now - stateSince > RelayLinkTiming.connectTimeout:
             handleDrop(reason: "Timed out connecting to the relay")
         case .connected:
-            if sendInFlight, now - sendStartedAt > sendStallTimeout {
-                handleDrop(reason: "Relay stopped accepting frames")
-                return
+            if let oldest = window.oldestUnconfirmedSince, now - oldest > RelayLinkTiming.sendStallTimeout {
+                return handleDrop(reason: "Relay stopped accepting frames")
             }
-            if now - stateSince > 5 { reconnectAttempt = 0 }
-            if now - lastPingAt >= pingInterval { sendPing() }
+            if now - stateSince > RelayLinkTiming.stableAfter { backoff.reset() }
+            if now - lastPingAt >= RelayLinkTiming.pingInterval { sendPing() }
         default:
             break
         }

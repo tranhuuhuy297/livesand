@@ -1,9 +1,8 @@
-// Level intro card (ready phase) and the won/lost result dialog with stars.
-import type { LevelDefinition } from '../game/level-definitions';
+// Level intro card: the briefing shown while a level waits in the ready phase.
+import { peakStormRain, type LevelDefinition } from '../game/level-definitions';
 import { formatClock, h, iconButton, setHidden, setText } from './hud-dom-helpers';
 import { ICONS } from './hud-icons';
-import { HudModal } from './hud-modal';
-import { peakStormRain, type HudActions, type HudSnapshot } from './hud-snapshot';
+import type { HudActions, HudSnapshot } from './hud-snapshot';
 
 export class LevelIntroCard {
   readonly root: HTMLDivElement;
@@ -42,57 +41,4 @@ function levelFacts(level: LevelDefinition): HTMLElement[] {
   const facts = [fact(ICONS.house, `${n} ${n === 1 ? 'village' : 'villages'}`), fact(ICONS.clock, `Hold for ${formatClock(level.durationSec)}`)];
   if (peakStormRain(level) > 0) facts.push(fact(ICONS.storm, 'Storm incoming'));
   return facts;
-}
-
-export class ResultDialog {
-  readonly modal: HudModal;
-  private readonly stars: HTMLElement[];
-  private readonly title = h('h2', { class: 'ls-modal-title' });
-  private readonly text = h('p', { class: 'ls-modal-lead' });
-  private readonly next: HTMLButtonElement;
-  private readonly retry: HTMLButtonElement;
-  private shownFor = '';
-
-  constructor(actions: HudActions) {
-    this.modal = new HudModal('ls-result', 'Level result');
-    this.stars = [0, 1, 2].map(() => h('span', { class: 'ls-star', html: ICONS.star, attrs: { 'aria-hidden': 'true' } }));
-    this.retry = iconButton(ICONS.retry, 'Retry', () => actions.resetLevel(), { class: 'ls-btn-secondary', showLabel: true, kbd: 'R' });
-    this.next = iconButton(ICONS.next, 'Next level', () => actions.nextLevel(), { class: 'ls-btn-primary', showLabel: true });
-    const freePlay = iconButton(ICONS.raise, 'Free play', () => actions.selectLevel('sandbox'), { class: 'ls-btn-ghost', showLabel: true });
-    this.modal.body.append(
-      h('div', { class: 'ls-stars' }, this.stars),
-      this.title,
-      this.text,
-      h('div', { class: 'ls-modal-actions' }, [freePlay, this.retry, this.next]),
-    );
-  }
-
-  /** Opens once per finished attempt; closing it keeps the finished map on screen until the next attempt. */
-  update(s: HudSnapshot): void {
-    const finished = s.phase === 'won' || s.phase === 'lost';
-    if (!finished) {
-      this.shownFor = '';
-      this.modal.close();
-      return;
-    }
-    const key = `${s.level.id}:${s.phase}`;
-    if (this.shownFor === key) return;
-    this.shownFor = key;
-    const { saved, total, stars } = s.summary;
-    this.stars.forEach((star, i) => star.classList.toggle('is-lit', i < stars));
-    this.modal.root.dataset.outcome = s.phase;
-    const won = s.phase === 'won';
-    setText(this.title, won ? (saved === total ? 'Every village is safe!' : 'You held back the flood') : 'Flooded!');
-    setText(
-      this.text,
-      won
-        ? `${saved} of ${total} ${total === 1 ? 'village' : 'villages'} kept dry for ${formatClock(s.level.durationSec)}.`
-        : 'The water swallowed every village. Dig a channel to the sea or build a levee, then try again.',
-    );
-    const hasNext = won && s.levelIndex >= 0 && s.levelIndex < s.levelCount - 1;
-    setHidden(this.next, !hasNext);
-    this.retry.classList.toggle('ls-btn-primary', !hasNext);
-    this.retry.classList.toggle('ls-btn-secondary', hasNext);
-    this.modal.open();
-  }
 }

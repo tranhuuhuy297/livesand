@@ -7,8 +7,6 @@
 .ls-modal-note { margin: 0 0 18px; padding: 10px 12px; border-radius: 10px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); color: #bae6fd; font-size: 13px; }
 .ls-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .ls-modal-actions .ls-btn { height: 42px; padding: 0 16px; }
-.ls-modal-hero { width: 56px; height: 56px; margin-bottom: 14px; padding: 12px; border-radius: 16px; background: linear-gradient(180deg, rgba(243, 205, 131, 0.22), rgba(216, 156, 57, 0.12)); color: var(--ls-sand); }
-.ls-modal-hero svg { width: 100%; height: 100%; }
 
 /* Result */
 .ls-result .ls-modal { text-align: center; width: min(440px, 100%); }
@@ -21,6 +19,8 @@
 .ls-star:nth-child(3).is-lit { animation-delay: 0.24s; }
 .ls-result[data-outcome='lost'] .ls-modal-title { color: #fca5a5; }
 .ls-result[data-outcome='won'] .ls-modal-title { color: #fde68a; }
+.ls-share { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--ls-border); }
+.ls-share-text { margin: 0 0 12px; color: var(--ls-muted); font-size: 13px; }
 
 /* Help */
 .ls-help .ls-modal { width: min(720px, 100%); }
@@ -31,7 +31,9 @@
 .ls-keys { display: inline-flex; gap: 4px; flex: none; }
 .ls-help-actions { margin-top: 18px; }
 
-/* Real sandbox steps */
+/* Real sandbox: setup illustration + steps */
+.ls-real-illustration { margin: -6px 0 14px; padding: 10px 12px 4px; border-radius: 14px; background: radial-gradient(120% 100% at 50% 0%, rgba(56, 189, 248, 0.12), rgba(255, 255, 255, 0.03)); border: 1px solid var(--ls-border); }
+.ls-real-illustration svg { display: block; width: 100%; height: auto; max-height: 116px; }
 .ls-steps { display: grid; gap: 10px; margin: 0 0 18px; padding: 0; list-style: none; counter-reset: step; }
 .ls-steps li { position: relative; display: grid; gap: 2px; padding-left: 38px; counter-increment: step; }
 .ls-steps li::before { content: counter(step); position: absolute; left: 0; top: 1px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: rgba(56, 189, 248, 0.15); color: var(--ls-water); font-weight: 800; font-size: 13px; }

@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws';
-import { DepthFormat, encodeDepthFrame } from './depth-frame-encoder.js';
+import { checkDepthFrameSize, DepthFormat, encodeDepthFrame } from './depth-frame-encoder.js';
 
 export interface FakeSourceOptions {
   url: string;
@@ -7,6 +7,8 @@ export interface FakeSourceOptions {
   width?: number;
   height?: number;
   log?: (m: string) => void;
+  /** Called once when retrying cannot help (wrong URL, replaced by another source); streaming has stopped. */
+  onFatal?: (reason: string) => void;
 }
 
 const FLAT_SAND_MM = 1000;
@@ -17,6 +19,10 @@ const NOISE_MM = 2;
 const MAX_BUFFERED_BYTES = 1 << 20;
 const RETRY_MIN_MS = 500;
 const RETRY_MAX_MS = 5000;
+const CLOSE_POLICY_VIOLATION = 1008;
+const CLOSE_REPLACED_BY_NEWER_SOURCE = 4001;
+// Handshake answers that mean "wrong URL or not allowed", not "relay busy or restarting".
+const FATAL_HTTP_STATUS = /Unexpected server response: (40[0-4])/;
 
 /** Synthetic LiDAR depth (mm): flat sand, a slowly drifting mound, and a hand blob circling above the sand. */
 export function synthesizeFakeDepth(width: number, height: number, tSec: number, out?: Uint16Array): Uint16Array {
@@ -52,17 +58,20 @@ export function synthesizeFakeDepth(width: number, height: number, tSec: number,
   return depth;
 }
 
-function checkPositiveInt(name: string, value: number, max: number): number {
-  if (!Number.isInteger(value) || value <= 0 || value > max) throw new RangeError(`${name} must be an integer in 1..${max}`);
-  return value;
+/** Why a close means retrying is pointless, or null for ordinary disconnects. */
+function fatalCloseReason(code: number, reason: string, url: string): string | null {
+  if (code === CLOSE_REPLACED_BY_NEWER_SOURCE) return 'another depth source connected to the relay and took over';
+  if (code === CLOSE_POLICY_VIOLATION) return `the relay refused ${url}: ${reason || 'policy violation'}`;
+  return null;
 }
 
 /** Streams synthetic LSD1 uint16-mm frames to a relay source URL, reconnecting with backoff until stopped. */
 export function startFakeDepthSource(opts: FakeSourceOptions): { stop(): void } {
   const fps = opts.fps ?? 30;
   if (!Number.isFinite(fps) || fps <= 0 || fps > 120) throw new RangeError('fps must be in (0, 120]');
-  const width = checkPositiveInt('width', opts.width ?? 256, 4096);
-  const height = checkPositiveInt('height', opts.height ?? 192, 4096);
+  const width = opts.width ?? 256;
+  const height = opts.height ?? 192;
+  checkDepthFrameSize(width, height);
   const protocol = new URL(opts.url).protocol; // throws TypeError on malformed URLs
   if (protocol !== 'ws:' && protocol !== 'wss:') throw new TypeError(`expected a ws:// or wss:// URL, got ${opts.url}`);
   const log = opts.log ?? (() => {});
@@ -74,6 +83,7 @@ export function startFakeDepthSource(opts: FakeSourceOptions): { stop(): void } 
   let retryMs = RETRY_MIN_MS;
   let frameIndex = 0;
   let stopped = false;
+  let fatal: string | null = null;
 
   const connect = (): void => {
     reconnectTimer = null;
@@ -84,12 +94,23 @@ export function startFakeDepthSource(opts: FakeSourceOptions): { stop(): void } 
       log(`fake depth source connected to ${opts.url} (${width}x${height} @ ${fps} fps)`);
     });
     ws.on('error', (err) => {
-      if (!stopped) log(`fake depth source error: ${err.message}`);
+      if (stopped) return;
+      const status = FATAL_HTTP_STATUS.exec(err.message);
+      if (status) fatal = `the relay answered HTTP ${status[1]} for ${opts.url} (is the path /ws?)`;
+      else log(`fake depth source error: ${err.message}`);
     });
-    ws.on('close', (code) => {
+    ws.on('close', (code, reasonBytes) => {
       if (socket === ws) socket = null;
       if (stopped) return;
-      log(`fake depth source disconnected (code ${code}); retrying in ${retryMs} ms`);
+      const reason = reasonBytes.toString('utf8');
+      fatal ??= fatalCloseReason(code, reason, opts.url);
+      if (fatal) {
+        handle.stop();
+        if (opts.onFatal) opts.onFatal(fatal);
+        else log(`fake depth source stopped: ${fatal}`);
+        return;
+      }
+      log(`fake depth source disconnected (code ${code}${reason ? `: ${reason}` : ''}); retrying in ${retryMs} ms`);
       reconnectTimer = setTimeout(connect, retryMs);
       retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
     });
@@ -112,10 +133,8 @@ export function startFakeDepthSource(opts: FakeSourceOptions): { stop(): void } 
     });
   };
 
-  connect();
   const frameTimer = setInterval(sendFrame, 1000 / fps);
-
-  return {
+  const handle = {
     stop(): void {
       if (stopped) return;
       stopped = true;
@@ -128,4 +147,6 @@ export function startFakeDepthSource(opts: FakeSourceOptions): { stop(): void } 
       else ws.close(1000, 'fake source stopped');
     },
   };
+  connect();
+  return handle;
 }

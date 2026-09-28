@@ -5,7 +5,10 @@
 export const DEPTH_FRAME_MAGIC = 0x3144534c;
 export const DEPTH_FRAME_VERSION = 1;
 export const DEPTH_FRAME_HEADER_BYTES = 28;
-const MAX_DIMENSION = 8192;
+// Same caps as src/core/depth-frame-protocol.ts: iPhone LiDAR sends 256x192; 1024x1024 f32 (4 MiB) is plenty.
+export const MAX_DEPTH_SIDE = 4096;
+export const MAX_DEPTH_PIXELS = 1024 * 1024;
+export const MAX_DEPTH_FRAME_BYTES = DEPTH_FRAME_HEADER_BYTES + MAX_DEPTH_PIXELS * 4;
 
 export const DepthFormat = { Float32Meters: 1, Uint16Millimeters: 2 } as const;
 export type DepthFormat = (typeof DepthFormat)[keyof typeof DepthFormat];
@@ -34,16 +37,37 @@ export function depthFrameByteLength(width: number, height: number, format: Dept
 }
 
 function checkDimension(name: string, value: number): void {
-  if (!Number.isInteger(value) || value <= 0 || value > MAX_DIMENSION) {
-    throw new RangeError(`${name} must be an integer in 1..${MAX_DIMENSION}, got ${value}`);
+  if (!Number.isInteger(value) || value <= 0 || value > MAX_DEPTH_SIDE) {
+    throw new RangeError(`${name} must be an integer in 1..${MAX_DEPTH_SIDE}, got ${value}`);
   }
+}
+
+/** Throws unless width x height is a frame size the browser decoder accepts. */
+export function checkDepthFrameSize(width: number, height: number): void {
+  checkDimension('width', width);
+  checkDimension('height', height);
+  if (width * height > MAX_DEPTH_PIXELS) throw new RangeError(`${width}x${height} exceeds ${MAX_DEPTH_PIXELS} pixels`);
+}
+
+/** Frame index of a well-formed LSD1 frame (header, size caps, exact length), or null for anything else. */
+export function lsd1FrameIndex(bytes: Uint8Array): number | null {
+  if (bytes.byteLength < DEPTH_FRAME_HEADER_BYTES || bytes.byteLength > MAX_DEPTH_FRAME_BYTES) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, true) !== DEPTH_FRAME_MAGIC || view.getUint16(4, true) !== DEPTH_FRAME_VERSION) return null;
+  const format = view.getUint16(6, true);
+  const bytesPerPixel = format === DepthFormat.Float32Meters ? 4 : format === DepthFormat.Uint16Millimeters ? 2 : 0;
+  const width = view.getUint32(8, true);
+  const height = view.getUint32(12, true);
+  if (bytesPerPixel === 0 || width === 0 || height === 0 || width > MAX_DEPTH_SIDE || height > MAX_DEPTH_SIDE) return null;
+  if (width * height > MAX_DEPTH_PIXELS) return null;
+  if (bytes.byteLength !== DEPTH_FRAME_HEADER_BYTES + width * height * bytesPerPixel) return null;
+  return view.getUint32(24, true);
 }
 
 /** Encodes one depth frame into the LSD1 wire format. */
 export function encodeDepthFrame(input: EncodeDepthFrameInput): ArrayBuffer {
   const { width, height, format, data, timestampMs, frameIndex } = input;
-  checkDimension('width', width);
-  checkDimension('height', height);
+  checkDepthFrameSize(width, height);
   const bytesPerPixel = depthFormatBytesPerPixel(format);
   const expectFloat = format === DepthFormat.Float32Meters;
   if (expectFloat ? !(data instanceof Float32Array) : !(data instanceof Uint16Array)) {

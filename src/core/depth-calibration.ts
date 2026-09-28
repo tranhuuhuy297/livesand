@@ -20,6 +20,8 @@ export interface DepthCalibration {
   smoothing: number;
   /** World units; smaller deltas are ignored (noise hysteresis). */
   changeThreshold: number;
+  /** Gaussian sigma (grid cells) over published heights: hides per-cell hysteresis offsets that jag contours; 0 = off. */
+  spatialSigma: number;
 }
 
 // Typical tabletop sandbox (~1 m wide) with the phone ~1 m above the sand.
@@ -28,6 +30,9 @@ const DEFAULT_REFERENCE_PLANE_METERS = 1.0;
 // Diggable depth / pile height of real sand boxes (meters of relief).
 const DEFAULT_DIG_METERS = 0.12;
 const DEFAULT_PILE_METERS = 0.2;
+// ~6 mm on a 1 m, 256-cell box: well below what sand holds, enough to smooth 1 cm contour lines.
+const DEFAULT_SPATIAL_SIGMA_CELLS = 1.5;
+const MAX_SPATIAL_SIGMA_CELLS = 8;
 
 export function gridRectQuad(grid: GridSize): Quad {
   return [
@@ -69,6 +74,7 @@ export function defaultDepthCalibration(grid: GridSize, depthWidth: number, dept
     handMarginMeters: 0.05,
     smoothing: 0.3,
     changeThreshold: 0.75,
+    spatialSigma: DEFAULT_SPATIAL_SIGMA_CELLS,
   };
 }
 
@@ -90,10 +96,14 @@ export function validateDepthCalibration(cal: DepthCalibration, grid: GridSize):
   finite(cal.handMarginMeters, 'handMarginMeters');
   finite(cal.smoothing, 'smoothing');
   finite(cal.changeThreshold, 'changeThreshold');
+  finite(cal.spatialSigma, 'spatialSigma');
   if (cal.referencePlaneMeters <= 0) throw new RangeError('Depth calibration referencePlaneMeters must be > 0');
   if (cal.unitsPerMeter <= 0) throw new RangeError('Depth calibration unitsPerMeter must be > 0');
   if (cal.minHeight > cal.maxHeight) throw new RangeError('Depth calibration minHeight must be <= maxHeight');
   if (cal.handMarginMeters < 0) throw new RangeError('Depth calibration handMarginMeters must be >= 0');
   if (cal.smoothing < 0 || cal.smoothing > 1) throw new RangeError('Depth calibration smoothing must be within 0..1');
   if (cal.changeThreshold < 0) throw new RangeError('Depth calibration changeThreshold must be >= 0');
+  if (cal.spatialSigma < 0 || cal.spatialSigma > MAX_SPATIAL_SIGMA_CELLS) {
+    throw new RangeError(`Depth calibration spatialSigma must be within 0..${MAX_SPATIAL_SIGMA_CELLS}`);
+  }
 }

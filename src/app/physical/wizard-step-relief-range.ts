@@ -22,12 +22,12 @@ export class ReliefRangeStep implements WizardStep {
   mount(body: HTMLElement): void {
     const { grid } = this.ctx.host;
     const { draft } = this.ctx;
-    const stage = el('div', 'ls-stage', [this.preview.canvas]);
+    const stage = el('div', 'lsp-stage', [this.preview.canvas]);
     stage.style.aspectRatio = `${grid.width} / ${grid.height}`;
     stage.style.width = `min(100%, calc(56vh * ${grid.width / grid.height}))`;
-    const bar = el('span', 'ls-legend-bar ls-legend-bar--marked');
+    const bar = el('span', 'lsp-legend-bar lsp-legend-bar--marked');
     bar.style.background = ELEVATION_GRADIENT_CSS;
-    this.flatMarker = el('span', { className: 'ls-legend-marker', text: 'flat' });
+    this.flatMarker = el('span', { className: 'lsp-legend-marker', text: 'flat' });
     bar.append(this.flatMarker);
     this.legendMax = el('span', { text: 'max' });
     const fields = [
@@ -46,14 +46,14 @@ export class ReliefRangeStep implements WizardStep {
         onInput: (v) => this.update(() => (draft.pileCm = v)),
       }),
     ];
-    this.derived = el('p', 'ls-derived');
-    body.append(el('div', 'ls-step-grid', [
-      el('div', 'ls-stage-col', [stage, el('div', 'ls-legend', [el('span', { text: '0 dug' }), bar, this.legendMax])]),
-      el('div', 'ls-side', [
+    this.derived = el('p', 'lsp-derived');
+    body.append(el('div', 'lsp-step-grid', [
+      el('div', 'lsp-stage-col', [stage, el('div', 'lsp-legend', [el('span', { text: '0 dug' }), bar, this.legendMax])]),
+      el('div', 'lsp-side', [
         ...fields.map((f) => f.root),
         this.derived,
         el('p', {
-          className: 'ls-tip',
+          className: 'lsp-tip',
           text: 'Pile sand up and dig a pit to check: pits turn deep blue, flat sand green, peaks brown and white. Magenta marks a hand.',
         }),
       ]),

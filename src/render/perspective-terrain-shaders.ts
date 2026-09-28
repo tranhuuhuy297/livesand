@@ -53,15 +53,17 @@ fn fsTerrain(input: TerrainVsOut) -> @location(0) vec4<f32> {
     let vs = frame.heightStyle.w;
     let n = normalize(vec3<f32>(-ts.y * vs, 1.0, -ts.z * vs));
     var albedo = elevationColor(heightToUnit(ts.x));
-    albedo = applyContours(albedo, contourLines(ts.x, frame.heightStyle.z, fwH));
-    let rain = 1.0 - exp(-emissionBilinear(input.gridPos) * 6.0);
+    albedo = applyContours(albedo, contourLines(ts.x, frame.heightStyle.z, fwH) * seaContourFade(ts.x));
+    let rain = rainAmount(input.gridPos);
     albedo *= 1.0 - 0.14 * rain;
+    albedo = mix(albedo, albedo * 0.55, rainRings(input.gridPos, rain, t, px) * 0.6);
     var sunVisible = 1.0;
     if (frame.misc.x > 0.5) {
       sunVisible = terrainSunVisibility(input.gridPos, ts.x);
     }
-    // Rings after lighting so they read as glowing markers on shaded slopes.
-    col = shadeVillageRings(input.gridPos, px, t, lightSurfaceShadowed(albedo, n, sunVisible));
+    // Markers after lighting so they read as glowing rings on shaded slopes.
+    let lit = shadeSourceMarkers(input.gridPos, px, t, lightSurfaceShadowed(albedo, n, sunVisible));
+    col = shadeVillageRings(input.gridPos, px, t, lit);
   }
   return vec4<f32>(applyFog(col, input.world), 1.0);
 }

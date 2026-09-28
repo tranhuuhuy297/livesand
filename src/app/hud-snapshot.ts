@@ -21,6 +21,14 @@ export interface HudSnapshot {
   brushRadius: number;
   view: ViewMode;
   speed: number;
+  /** A help/info dialog or the level menu is open, so the level clock and the water are on hold. */
+  paused: boolean;
+  /** The player has sculpted during this attempt (changes the advice after a loss). */
+  sculpted: boolean;
+  /** Free play: global rain toggle. */
+  freeRain: boolean;
+  /** 0..1 storm strength driving the rain overlay. */
+  stormLevel: number;
 }
 
 export interface HudActions {
@@ -34,16 +42,17 @@ export interface HudActions {
   cycleSpeed(): void;
   toggleFullscreen(): void;
   openProjectorMode(): void;
-}
-
-/** Highest storm rain of a level (0 when it has no storm), used to scale the storm meter. */
-export function peakStormRain(level: LevelDefinition): number {
-  return level.storm.reduce((max, k) => Math.max(max, k.rain), 0);
+  /** Free play: next landscape with a fresh seed. */
+  newTerrain(): void;
+  /** Free play: global rain on/off. */
+  toggleRain(): void;
+  /** Copies a link to the current level. */
+  shareLevel(): void;
 }
 
 export function buildHudSnapshot(
   session: SandboxSession,
-  ui: { tool: SculptTool; brushRadius: number; view: ViewMode; speed: number },
+  ui: { tool: SculptTool; brushRadius: number; view: ViewMode; speed: number; paused: boolean; sculpted: boolean },
 ): HudSnapshot {
   const { game, level } = session;
   return {
@@ -56,6 +65,8 @@ export function buildHudSnapshot(
     villages: game.villages,
     markers: game.markers(),
     summary: game.summary(),
+    freeRain: session.freePlayRain,
+    stormLevel: session.stormLevel,
     ...ui,
   };
 }

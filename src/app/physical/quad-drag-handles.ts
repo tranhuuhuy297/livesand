@@ -31,7 +31,7 @@ export class QuadDragHandles {
     this.opts = opts;
     this.handles = opts.labels.map((label, i) => {
       const h = el('button', {
-        className: `ls-handle ls-handle--${i}`,
+        className: `lsp-handle lsp-handle--${i}`,
         text: label,
         attrs: { type: 'button', 'aria-label': `${label} corner: drag, or focus and use the arrow keys`, 'data-corner': String(i) },
       });

@@ -48,6 +48,14 @@ export function iconButton(icon: string, label: string, onClick: () => void, opt
   return btn;
 }
 
+/** Button-styled link that opens in a new tab (GitHub, docs). */
+export function linkButton(icon: string, label: string, href: string, className = 'ls-btn-secondary'): HTMLAnchorElement {
+  return h('a', { class: `ls-btn ${className}`, attrs: { href, target: '_blank', rel: 'noopener noreferrer' } }, [
+    h('span', { class: 'ls-icon', html: icon, attrs: { 'aria-hidden': 'true' } }),
+    h('span', { class: 'ls-btn-label', text: label }),
+  ]);
+}
+
 /** Sets text only when it changed, avoiding layout work on every frame. */
 export function setText(el: HTMLElement, text: string): void {
   if (el.textContent !== text) el.textContent = text;
@@ -72,4 +80,20 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   if (target.isContentEditable) return true;
   if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
   return target instanceof HTMLInputElement && !['range', 'checkbox', 'radio', 'button'].includes(target.type);
+}
+
+/** Copies text; falls back to a hidden textarea where the async clipboard API is unavailable (plain http, iframes). */
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = h('textarea', { attrs: { readonly: '', 'aria-hidden': 'true', style: 'position:fixed;opacity:0' } });
+    area.value = text;
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  }
 }

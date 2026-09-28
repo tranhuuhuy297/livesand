@@ -5,6 +5,7 @@ import { VillageWaterProbe, type WaterProbe } from '../gpu/village-water-probe';
 import { WaterSimPipes } from '../gpu/water-sim-pipes';
 import type { OrbitCamera } from '../render/orbit-camera';
 import { Perspective3DRenderer } from '../render/perspective-3d-renderer';
+import type { SourceMarker } from '../render/render-frame-uniforms';
 import { DEFAULT_RENDER_STYLE, type RenderStyle } from '../render/shading-common-wgsl';
 import { TopDownProjectorRenderer } from '../render/top-down-projector-renderer';
 import type { ViewMode } from './app-url-params';
@@ -14,6 +15,8 @@ export interface SceneFrame {
   /** null skips drawing (fast-forward frames never touch the canvas). */
   view: ViewMode | null;
   camera: OrbitCamera | null;
+  /** 2D only: map turned a quarter for portrait screens. */
+  rotated?: boolean;
 }
 
 export class SandboxGpuScene {
@@ -26,6 +29,7 @@ export class SandboxGpuScene {
   private perspective: Perspective3DRenderer | null = null;
   private style: RenderStyle;
   private villages: VillageMarker[] = [];
+  private sources: SourceMarker[] = [];
   private probeCount = 0;
   private destroyed = false;
 
@@ -55,6 +59,12 @@ export class SandboxGpuScene {
     this.perspective?.setVillages(markers);
   }
 
+  setSources(markers: SourceMarker[]): void {
+    this.sources = markers;
+    this.topDown.setSources(markers);
+    this.perspective?.setSources(markers);
+  }
+
   setProbes(probes: WaterProbe[]): void {
     this.probe.setProbes(probes);
     this.probeCount = probes.length;
@@ -67,6 +77,14 @@ export class SandboxGpuScene {
 
   setOpenEdges(openEdges: EdgeFlags): void {
     this.sim.setParams({ openEdges });
+  }
+
+  /** Runs `steps` sim steps right away without drawing (level prefill). */
+  runSteps(steps: number): void {
+    if (this.destroyed || steps <= 0) return;
+    const encoder = this.gpu.device.createCommandEncoder({ label: 'livesand-prefill' });
+    this.sim.encodeSteps(encoder, steps);
+    this.gpu.device.queue.submit([encoder.finish()]);
   }
 
   /** Encodes sim steps, probes and the view into one command buffer, submits it, then starts the probe readback. */
@@ -84,7 +102,7 @@ export class SandboxGpuScene {
         if (frame.camera) renderer.setCamera(frame.camera.viewProjection(texture.width / texture.height), frame.camera.eye());
         renderer.render(encoder, target, texture.width, texture.height);
       } else {
-        this.topDown.render(encoder, target);
+        this.topDown.render(encoder, target, frame.rotated ?? false);
       }
     }
     device.queue.submit([encoder.finish()]);
@@ -105,6 +123,7 @@ export class SandboxGpuScene {
       this.perspective = new Perspective3DRenderer(this.gpu, this.sim);
       this.perspective.setStyle(this.style);
       this.perspective.setVillages(this.villages);
+      this.perspective.setSources(this.sources);
     }
     return this.perspective;
   }

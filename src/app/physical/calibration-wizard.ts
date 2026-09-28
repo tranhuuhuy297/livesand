@@ -62,25 +62,25 @@ export class CalibrationWizard {
       new SandboxCornersStep(this.ctx), new FlatSandCaptureStep(this.ctx), new ReliefRangeStep(this.ctx),
       new ProjectorKeystoneStep(this.ctx), new SaveSummaryStep(this.ctx),
     ];
-    this.eyebrow = el('div', 'ls-eyebrow');
-    this.liveBadge = el('span', { className: 'ls-live-badge', attrs: { 'data-testid': 'wizard-live' } });
-    this.title = el('h2', 'ls-title');
-    this.pills = this.steps.map((s, i) => el('li', 'ls-step-pill', [el('span', { className: 'ls-step-num', text: String(i + 1) }), s.short]));
-    this.body = el('div', 'ls-wiz-body');
-    this.notice = el('div', { className: 'ls-notice', attrs: { role: 'status' } });
-    this.backBtn = button('Back', () => this.go(this.index - 1), 'ls-btn ls-btn--ghost');
-    this.nextBtn = button('Next', () => this.next(), 'ls-btn ls-btn--primary');
+    this.eyebrow = el('div', 'lsp-eyebrow');
+    this.liveBadge = el('span', { className: 'lsp-live-badge', attrs: { 'data-testid': 'wizard-live' } });
+    this.title = el('h2', 'lsp-title');
+    this.pills = this.steps.map((s, i) => el('li', 'lsp-step-pill', [el('span', { className: 'lsp-step-num', text: String(i + 1) }), s.short]));
+    this.body = el('div', 'lsp-wiz-body');
+    this.notice = el('div', { className: 'lsp-notice', attrs: { role: 'status' } });
+    this.backBtn = button('Back', () => this.go(this.index - 1), 'lsp-btn lsp-btn--ghost');
+    this.nextBtn = button('Next', () => this.next(), 'lsp-btn lsp-btn--primary');
     this.nextBtn.dataset.testid = 'wizard-next';
-    const closeBtn = button(opts.canCancel ? 'Cancel' : 'Skip for now', () => opts.onClose(), 'ls-btn ls-btn--ghost');
+    const closeBtn = button(opts.canCancel ? 'Cancel' : 'Skip for now', () => opts.onClose(), 'lsp-btn lsp-btn--ghost');
     closeBtn.dataset.testid = 'wizard-close';
     closeBtn.title = opts.canCancel ? 'Keep the previous calibration' : 'Use a rough automatic calibration until you calibrate';
-    const card = el('section', { className: 'ls-card ls-wizard', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Sandbox calibration' } }, [
-      el('header', 'ls-wiz-head', [el('div', '', [this.eyebrow, this.title]), el('div', 'ls-head-side', [this.liveBadge, el('ol', 'ls-steps', this.pills)])]),
+    const card = el('section', { className: 'lsp-card lsp-wizard', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Sandbox calibration' } }, [
+      el('header', 'lsp-wiz-head', [el('div', '', [this.eyebrow, this.title]), el('div', 'lsp-head-side', [this.liveBadge, el('ol', 'lsp-steps', this.pills)])]),
       this.body,
       this.notice,
-      el('footer', 'ls-wiz-foot', [this.backBtn, el('span', 'ls-spacer'), closeBtn, this.nextBtn]),
+      el('footer', 'lsp-wiz-foot', [this.backBtn, el('span', 'lsp-spacer'), closeBtn, this.nextBtn]),
     ]);
-    this.overlay = el('div', { className: 'ls-overlay ls-wizard-overlay', attrs: { 'data-testid': 'calibration-wizard' } }, [card]);
+    this.overlay = el('div', { className: 'lsp-overlay lsp-wizard-overlay', attrs: { 'data-testid': 'calibration-wizard' } }, [card]);
     opts.root.append(this.overlay);
     this.go(0);
     this.loop();

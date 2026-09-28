@@ -111,6 +111,12 @@ kbd {
   border-radius: 16px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
+/* Portrait screens: the map is drawn a quarter-turned, so the canvas takes the inverse aspect and fills the height. */
+.is-portrait.view-2d .ls-canvas {
+  width: min(calc(100vw - 24px), calc((100dvh - 300px) / var(--grid-aspect)));
+  aspect-ratio: 1 / var(--grid-aspect);
+  margin-top: 0;
+}
 
 .ls-brush-cursor { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; overflow: visible; --tool: #f5d38a; }
 .ls-brush-ring { fill: none; stroke: var(--tool); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.85; filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7)); }
@@ -126,7 +132,7 @@ kbd {
 .ls-boot-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.12); border-top-color: var(--ls-sand); animation: ls-spin 0.9s linear infinite; }
 .ls-noscript { margin: 40px auto; max-width: 480px; text-align: center; }
 .ls-fatal { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; overflow: auto; background: radial-gradient(90% 70% at 50% 0%, #1b2a3a 0%, var(--ls-bg) 70%); }
-.ls-fatal-card { width: min(560px, 100%); padding: 32px; background: var(--ls-panel-strong); }
+.ls-fatal-card { width: min(600px, 100%); padding: 32px; background: var(--ls-panel-strong); }
 .ls-fatal-logo { width: 52px; height: 52px; margin-bottom: 16px; }
 .ls-fatal-logo svg { width: 100%; height: 100%; }
 .ls-fatal-title { margin: 0 0 10px; font-size: 24px; line-height: 1.2; }
@@ -134,6 +140,9 @@ kbd {
 .ls-fatal-sub { margin: 0 0 8px; color: var(--ls-muted); }
 .ls-fatal-tips { margin: 0 0 20px; padding-left: 20px; color: var(--ls-text); }
 .ls-fatal-tips li { margin: 4px 0; }
+.ls-fatal-preview { margin: 0 0 18px; }
+.ls-fatal-preview img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--ls-border); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35); }
+.ls-fatal-preview figcaption { margin-top: 8px; color: var(--ls-muted); font-size: 13px; }
 
 /* Projector mode: pure black, only the corner-pinned sandbox image; the cursor hides when idle. */
 html[data-mode='projector'],

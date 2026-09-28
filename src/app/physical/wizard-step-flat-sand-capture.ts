@@ -27,23 +27,23 @@ export class FlatSandCaptureStep implements WizardStep {
 
   mount(body: HTMLElement): void {
     const { depthWidth: w, depthHeight: h } = this.ctx.draft;
-    const stage = el('div', 'ls-stage', [this.preview.canvas]);
+    const stage = el('div', 'lsp-stage', [this.preview.canvas]);
     stage.style.aspectRatio = `${w} / ${h}`;
     stage.style.width = `min(100%, calc(56vh * ${w / h}))`;
-    this.captureBtn = button('Capture flat sand', () => this.start(), 'ls-btn ls-btn--primary ls-btn--wide');
+    this.captureBtn = button('Capture flat sand', () => this.start(), 'lsp-btn lsp-btn--primary lsp-btn--wide');
     this.captureBtn.dataset.testid = 'capture-reference';
-    this.fill = el('div', 'ls-progress-fill');
-    this.result = el('div', { className: 'ls-result', attrs: { 'data-testid': 'capture-result' } });
-    body.append(el('div', 'ls-step-grid', [
-      el('div', 'ls-stage-col', [stage]),
-      el('div', 'ls-side', [
-        el('p', { className: 'ls-lead', text: 'Smooth the sand so it is flat and level, take your hands out of the box, then capture.' }),
+    this.fill = el('div', 'lsp-progress-fill');
+    this.result = el('div', { className: 'lsp-result', attrs: { 'data-testid': 'capture-result' } });
+    body.append(el('div', 'lsp-step-grid', [
+      el('div', 'lsp-stage-col', [stage]),
+      el('div', 'lsp-side', [
+        el('p', { className: 'lsp-lead', text: 'Smooth the sand so it is flat and level, take your hands out of the box, then capture.' }),
         el('p', {
-          className: 'ls-tip',
+          className: 'lsp-tip',
           text: 'LiveSand takes the per-pixel median of 15 depth frames as its flat-sand reference; every height is measured from it. Recapture whenever the phone moves.',
         }),
         this.captureBtn,
-        el('div', 'ls-progress', [this.fill]),
+        el('div', 'lsp-progress', [this.fill]),
         this.result,
       ]),
     ]));

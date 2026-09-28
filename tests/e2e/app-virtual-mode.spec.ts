@@ -76,12 +76,12 @@ test('idle play on the first level floods the village and loses in time', async 
   expect(problems).toEqual([]);
 });
 
-test('digging the intended channel on the first level saves the village', async ({ page }) => {
+test('one quick swipe from the village to the sea saves the first level', async ({ page }) => {
   test.setTimeout(180_000);
   const problems = watchConsole(page);
   await openApp(page, '?level=first-flood&view=2d');
   await page.keyboard.press('Enter');
-  await stepFrames(page, 20, 0.5); // the spring has been filling the lake for 10 s
+  await stepFrames(page, 6, 0.5); // the lake keeps rising for 3 s while the player finds the sea
   const box = await page.locator('canvas.ls-canvas').boundingBox();
   if (!box) throw new Error('canvas has no layout box');
   const grid = { width: 256, height: 192 };
@@ -90,10 +90,10 @@ test('digging the intended channel on the first level saves the village', async 
     x: box.x + ((u * (grid.width - 1) + 0.5) / grid.width) * box.width,
     y: box.y + ((v * (grid.height - 1) + 0.5) / grid.height) * box.height,
   });
-  // The reference solution: drag the dig brush east through the coastal bank at ~12 cells/s.
-  const from = toClient(0.5, 0.76);
-  const to = toClient(0.86, 0.76);
-  const frames = Math.ceil(((0.86 - 0.5) * (grid.width - 1)) / 12 / 0.1);
+  // The obvious human move: one fast (~48 cells/s) Dig swipe from the village straight east to the sea.
+  const from = toClient(0.43, 0.73);
+  const to = toClient(0.9, 0.73);
+  const frames = Math.ceil(((0.9 - 0.43) * (grid.width - 1)) / 48 / 0.1);
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   for (let i = 1; i <= frames; i++) {
@@ -112,6 +112,8 @@ test('digging the intended channel on the first level saves the village', async 
   expect(state.villages.every((v) => v.state !== 'lost')).toBe(true);
   await expect(page.locator('.ls-result .ls-modal-title')).toHaveText('Every village is safe!');
   await expect(page.locator('.ls-result .ls-star.is-lit')).toHaveCount(3);
+  await expect(page.locator('.ls-result .ls-star-link')).toHaveAttribute('href', /github\.com/);
+  await expect(page.locator('.ls-topbar .ls-github')).toHaveAttribute('href', /github\.com/);
   await page.screenshot({ path: `${SCREENS_DIR}app-won.png` });
   expect(state.gpuErrors).toEqual([]);
   expect(problems).toEqual([]);
@@ -185,5 +187,9 @@ test('shows a friendly page when WebGPU is unavailable', async ({ page }) => {
   await page.waitForFunction(() => Boolean(window.__livesand?.error), null, { timeout: 30_000 });
   await expect(page.locator('.ls-fatal-title')).toContainText('can’t run LiveSand');
   await expect(page.locator('.ls-fatal-tips li')).not.toHaveCount(0);
+  await expect(page.locator('.ls-fatal-preview img')).toHaveJSProperty('complete', true);
+  expect(await page.locator('.ls-fatal-preview img').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1200);
+  await expect(page.locator('.ls-fatal .ls-btn-primary')).toHaveAttribute('href', /github\.com/);
+  await page.screenshot({ path: `${SCREENS_DIR}app-no-webgpu.png` });
   expect(await page.evaluate(() => window.__livesand?.ready)).toBe(false);
 });

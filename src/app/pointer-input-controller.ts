@@ -2,10 +2,11 @@
 // resizes the brush, two-finger touch orbits and pinch-zooms.
 import type { Vec2 } from '../core/types';
 import { sampleHeightBilinear } from '../input/heightfield-ray-picker';
-import { applySculptBrush, type SculptTool } from '../input/sculpt-tools';
+import { applySculptStroke, type SculptBounds, type SculptTool } from '../input/sculpt-tools';
 import type { OrbitCamera } from '../render/orbit-camera';
 import type { SandboxSession } from './sandbox-session';
 import { TOOL_STRENGTH } from './sculpt-tool-settings';
+import { applyPinchOrbit, applyWheel, ORBIT_RADIANS_PER_PX, pinchState, type PinchState } from './pointer-camera-gestures';
 import { screenToGrid, type ViewGeometry } from './view-screen-mapping';
 
 export interface PointerInputHost {
@@ -16,24 +17,29 @@ export interface PointerInputHost {
   tool(): SculptTool;
   brushRadius(): number;
   changeBrushRadius(delta: number): void;
-  sculptBounds(): { min: number; max: number };
+  sculptBounds(): SculptBounds;
   /** First tool contact of a stroke (auto-starts a level waiting on its intro card). */
   onStrokeStart(): void;
 }
 
-const ORBIT_RADIANS_PER_PX = 0.006;
-const WHEEL_ZOOM_PER_PX = 0.0015;
+/** A touch becomes a stroke once it moves this far or stays down this long without a second finger. */
+export const TOUCH_SLOP_PX = 8;
+export const TOUCH_HOLD_SEC = 0.1;
 
-type DragMode = 'none' | 'tool' | 'orbit' | 'gesture';
+// 'pending': a lone touch that may still turn into a two-finger gesture, so it neither sculpts nor starts the level.
+type DragMode = 'none' | 'pending' | 'tool' | 'orbit' | 'gesture';
 
 export class PointerInputController {
   private readonly host: PointerInputHost;
   private readonly pointers = new Map<number, Vec2>();
   private mode: DragMode = 'none';
   private hover: Vec2 | null = null;
+  private strokeStart: Vec2 | null = null;
+  private pendingSec = 0;
+  private lastGrid: Vec2 | null = null;
   private flattenTarget: number | undefined;
   private spaceHeld = false;
-  private gesture: { dist: number; mid: Vec2 } | null = null;
+  private gesture: PinchState | null = null;
   private readonly cleanup: () => void;
 
   constructor(host: PointerInputHost) {
@@ -52,7 +58,10 @@ export class PointerInputController {
       on('pointerleave', (ev) => {
         if (ev.pointerType === 'mouse' && this.mode === 'none') this.hover = null;
       }),
-      on('wheel', (ev) => this.onWheel(ev)),
+      on('wheel', (ev) => {
+        ev.preventDefault();
+        applyWheel(ev, host.geometry().view, host.camera, (d) => host.changeBrushRadius(d));
+      }),
       on('contextmenu', (ev) => ev.preventDefault()),
     ];
     this.cleanup = () => offs.forEach((off) => off());
@@ -72,12 +81,18 @@ export class PointerInputController {
     this.host.canvas.classList.toggle('is-orbit-ready', held);
   }
 
-  /** Applies the held tool for this frame's real duration. */
+  /** Applies the held tool for this frame: rain follows the cursor, sculpting follows the path since last frame. */
   applyFrame(dtSec: number): void {
     const { session } = this.host;
+    if (this.mode === 'pending') {
+      this.pendingSec += dtSec;
+      if (this.pendingSec >= TOUCH_HOLD_SEC) this.beginStroke();
+    }
     const p = this.mode === 'tool' && this.hover ? screenToGrid(this.host.geometry(), this.hover.x, this.hover.y) : null;
     const tool = this.host.tool();
     if (!p || tool !== 'rain') session.clearBrushRain();
+    const last = this.lastGrid;
+    this.lastGrid = p;
     if (!p) return;
     const radius = this.host.brushRadius();
     if (tool === 'rain') {
@@ -85,8 +100,7 @@ export class PointerInputController {
       return;
     }
     const brush = { radius, strength: TOOL_STRENGTH[tool] };
-    const bounds = this.host.sculptBounds();
-    if (applySculptBrush(session.heights, session.grid, p.x, p.y, tool, brush, dtSec, bounds, this.flattenTarget)) {
+    if (applySculptStroke(session.heights, session.grid, last, p, tool, brush, dtSec, this.host.sculptBounds(), this.flattenTarget)) {
       session.markTerrainDirty();
     }
   }
@@ -108,7 +122,8 @@ export class PointerInputController {
     if (ev.pointerType === 'touch' && this.pointers.size >= 2) {
       this.mode = 'gesture';
       this.hover = null;
-      this.gesture = this.touchGesture();
+      this.lastGrid = null;
+      this.gesture = pinchState(this.pointers);
       return;
     }
     if (this.mode !== 'none') return;
@@ -118,10 +133,22 @@ export class PointerInputController {
       return;
     }
     if (ev.button !== 0 || this.spaceHeld) return;
-    this.mode = 'tool';
     this.hover = pos;
-    const start = screenToGrid(this.host.geometry(), pos.x, pos.y);
-    this.flattenTarget = start ? sampleHeightBilinear(this.host.session.heights, this.host.session.grid, start.x, start.y) : undefined;
+    this.strokeStart = pos;
+    this.lastGrid = null;
+    if (ev.pointerType === 'touch') {
+      this.mode = 'pending';
+      this.pendingSec = 0;
+      return;
+    }
+    this.beginStroke();
+  }
+
+  private beginStroke(): void {
+    this.mode = 'tool';
+    const start = this.strokeStart ?? this.hover;
+    const at = start ? screenToGrid(this.host.geometry(), start.x, start.y) : null;
+    this.flattenTarget = at ? sampleHeightBilinear(this.host.session.heights, this.host.session.grid, at.x, at.y) : undefined;
     this.host.onStrokeStart();
   }
 
@@ -133,6 +160,10 @@ export class PointerInputController {
       this.host.camera.rotate(-(pos.x - prev.x) * ORBIT_RADIANS_PER_PX, (pos.y - prev.y) * ORBIT_RADIANS_PER_PX);
     } else if (this.mode === 'gesture') {
       this.updateGesture();
+    } else if (this.mode === 'pending' && prev) {
+      this.hover = pos;
+      const start = this.strokeStart ?? pos;
+      if (Math.hypot(pos.x - start.x, pos.y - start.y) >= TOUCH_SLOP_PX) this.beginStroke();
     } else if (ev.pointerType === 'mouse' || this.mode === 'tool') {
       this.hover = pos;
     }
@@ -141,42 +172,23 @@ export class PointerInputController {
   private onUp(ev: PointerEvent): void {
     this.pointers.delete(ev.pointerId);
     if (this.mode === 'gesture' && this.pointers.size >= 2) {
-      this.gesture = this.touchGesture();
+      this.gesture = pinchState(this.pointers);
       return;
     }
     // After a pinch the remaining finger must lift before painting again, so a gesture never ends in a stray stroke.
-    if (this.pointers.size > 0 && this.mode === 'gesture') return;
     if (this.pointers.size > 0 && this.mode !== 'none') return;
     this.mode = 'none';
     this.gesture = null;
+    this.strokeStart = null;
+    this.lastGrid = null;
     this.host.canvas.classList.remove('is-orbiting');
     if (ev.pointerType !== 'mouse') this.hover = null;
   }
 
-  private onWheel(ev: WheelEvent): void {
-    ev.preventDefault();
-    const scale = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1;
-    const delta = ev.deltaY * scale;
-    if (ev.altKey || this.host.geometry().view === '2d') {
-      if (delta !== 0) this.host.changeBrushRadius(delta < 0 ? 1 : -1);
-      return;
-    }
-    this.host.camera.zoom(Math.exp(Math.max(-200, Math.min(200, delta)) * WHEEL_ZOOM_PER_PX));
-  }
-
-  private touchGesture(): { dist: number; mid: Vec2 } | null {
-    const pts = [...this.pointers.values()];
-    if (pts.length < 2) return null;
-    const [a, b] = pts;
-    return { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
-  }
-
   private updateGesture(): void {
-    const next = this.touchGesture();
+    const next = pinchState(this.pointers);
     const prev = this.gesture;
     this.gesture = next;
-    if (!next || !prev || this.host.geometry().view !== '3d') return;
-    this.host.camera.rotate(-(next.mid.x - prev.mid.x) * ORBIT_RADIANS_PER_PX, (next.mid.y - prev.mid.y) * ORBIT_RADIANS_PER_PX);
-    if (prev.dist > 10 && next.dist > 10) this.host.camera.zoom(prev.dist / next.dist);
+    if (next && prev && this.host.geometry().view === '3d') applyPinchOrbit(this.host.camera, prev, next);
   }
 }

@@ -22,6 +22,8 @@ final class DepthStreamController: ObservableObject {
     private let client: RelayWebSocketClient
     private let streamer: LidarDepthStreamer
     private var subscriptions = Set<AnyCancellable>()
+    private var arRestart: Task<Void, Never>?
+    private var arRestartAttempt = 0
 
     init() {
         _relayURLText = Published(initialValue: UserDefaults.standard.string(forKey: Self.relayURLDefaultsKey) ?? "")
@@ -33,7 +35,7 @@ final class DepthStreamController: ObservableObject {
         // Workers emit on their own queues; DispatchQueue.main keeps delivery ordered on the main thread.
         client.stateChanges
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] state in self?.connection = state }
+            .sink { [weak self] state in self?.handle(state) }
             .store(in: &subscriptions)
         streamer.events
             .receive(on: DispatchQueue.main)
@@ -77,6 +79,9 @@ final class DepthStreamController: ObservableObject {
 
     func stopStreaming() {
         isStreaming = false
+        arRestart?.cancel()
+        arRestart = nil
+        arRestartAttempt = 0
         streamer.stop()
         client.disconnect()
         stats.fps = 0
@@ -103,15 +108,43 @@ final class DepthStreamController: ObservableObject {
         UIApplication.shared.open(url)
     }
 
+    private func handle(_ state: RelayConnectionState) {
+        connection = state
+        if case .stopped(let reason) = state, isStreaming {
+            stopStreaming()
+            errorMessage = reason
+        }
+    }
+
     private func handle(_ event: DepthStreamerEvent) {
         switch event {
         case .stats(let newStats):
-            if isStreaming { stats = newStats }
+            guard isStreaming else { return }
+            stats = newStats
+            if newStats.fps > 0 { arRestartAttempt = 0 }
         case .notice(let message):
             arNotice = message
-        case .failed(let message):
-            stopStreaming()
-            errorMessage = message
+        case .failed(let message, let recoverable):
+            guard recoverable, isStreaming else {
+                stopStreaming()
+                errorMessage = message
+                return
+            }
+            restartAR(after: message)
+        }
+    }
+
+    /// An unattended projector should heal itself: keep the relay link and re-run AR with backoff (2 s .. 30 s).
+    private func restartAR(after message: String) {
+        let delay = min(30, 2 * pow(2, Double(arRestartAttempt)))
+        arRestartAttempt += 1
+        arNotice = "\(message) Restarting the camera in \(Int(delay)) s…"
+        arRestart?.cancel()
+        arRestart = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled, self.isStreaming else { return }
+            self.arNotice = nil
+            self.streamer.start()
         }
     }
 }

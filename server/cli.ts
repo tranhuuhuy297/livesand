@@ -4,14 +4,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { startFakeDepthSource } from './fake-depth-source.js';
-import { advertisedHosts, isWildcardHost, urlHost } from './lan-addresses.js';
+import { advertisedHosts, defaultRouteIPv4, isLoopbackHost, isWildcardHost, urlHost } from './lan-addresses.js';
+import { normalizeOrigin } from './relay-origin-policy.js';
 import { startRelayServer } from './relay-server.js';
+import { normalizeSourceUrl } from './relay-source-url.js';
 
 const DEFAULT_PORT = 8787;
 const USAGE = `Usage:
-  livesand [--port ${DEFAULT_PORT}] [--host <address>]
+  livesand [--port ${DEFAULT_PORT}] [--host <address>] [--allow-origin <https://your.site> ...]
       Serve the LiveSand web app and the depth relay (host defaults to all interfaces).
-  livesand fake-source [--url ws://localhost:${DEFAULT_PORT}/ws?role=source] [--fps 30] [--width 256] [--height 192]
+      --allow-origin lets a self-hosted copy of the web app use this relay (repeatable).
+  livesand fake-source [--url ws://localhost:${DEFAULT_PORT}] [--fps 30] [--width 256] [--height 192]
       Stream synthetic LiDAR depth frames to a relay (no iPhone needed).
   livesand --help`;
 
@@ -45,9 +48,9 @@ function installShutdown(close: () => Promise<void>): void {
   process.on('SIGTERM', onSignal);
 }
 
-function printBanner(port: number, host: string | undefined): void {
+function printBanner(port: number, host: string | undefined, preferredIp: string | null): void {
   const localHost = isWildcardHost(host) ? 'localhost' : urlHost(host as string);
-  const lanHosts = advertisedHosts(host).map(urlHost);
+  const lanHosts = advertisedHosts(host, preferredIp).map(urlHost);
   const lines = [
     '',
     `LiveSand relay running on port ${port}`,
@@ -55,22 +58,51 @@ function printBanner(port: number, host: string | undefined): void {
     `  Projector view:    http://${localHost}:${port}/?mode=projector`,
   ];
   if (lanHosts.length === 0) lines.push('  (no LAN address found: connect this computer to the same Wi-Fi as the iPhone)');
-  for (const h of lanHosts) lines.push(`  Projector on LAN:  http://${h}:${port}/?mode=projector`);
-  for (const h of lanHosts) lines.push(`  iPhone source URL: ws://${h}:${port}/ws?role=source`);
-  lines.push('  (or scan the pairing QR code shown in the web app)', '', 'Press Ctrl+C to stop.', '');
+  if (lanHosts.length > 0 && lanHosts.every(isLoopbackHost)) {
+    lines.push(
+      `  Fake source URL:   ws://${lanHosts[0]}:${port}/ws?role=source`,
+      `  warning: bound to loopback (${host}), so the iPhone cannot connect; omit --host or pass this computer's LAN IP.`,
+    );
+  } else {
+    for (const h of lanHosts) lines.push(`  Projector on LAN:  http://${h}:${port}/?mode=projector`);
+    for (const h of lanHosts) lines.push(`  iPhone source URL: ws://${h}:${port}/ws?role=source`);
+    lines.push('  (or scan the pairing QR code shown in the web app)');
+  }
+  lines.push('', 'Press Ctrl+C to stop.', '');
   console.log(lines.join('\n'));
+}
+
+/** Friendly message for listen errors a user can fix, or null for unexpected ones. */
+function listenErrorMessage(code: string | undefined, port: number, host: string | undefined): string | null {
+  const where = `${host ?? 'all interfaces'}:${port}`;
+  if (code === 'EADDRINUSE') return `port ${port} is already in use; pick another with --port`;
+  if (code === 'EADDRNOTAVAIL') return `address ${host} is not available on this machine`;
+  if (code === 'EACCES' || code === 'EPERM') {
+    return port < 1024 ? `port ${port} needs elevated privileges; use a port >= 1024` : `not allowed to listen on ${where}`;
+  }
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return `cannot resolve host "${host}"; pass an IP address or omit --host`;
+  return null;
 }
 
 async function runServer(argv: string[]): Promise<void> {
   const { values } = parseArgs({
     args: argv,
-    options: { port: { type: 'string', short: 'p' }, host: { type: 'string' }, help: { type: 'boolean', short: 'h' } },
+    options: {
+      port: { type: 'string', short: 'p' },
+      host: { type: 'string' },
+      'allow-origin': { type: 'string', multiple: true },
+      help: { type: 'boolean', short: 'h' },
+    },
     strict: true,
     allowPositionals: false,
   });
   if (values.help) return void console.log(USAGE);
   const port = intOption('port', values.port, DEFAULT_PORT, 0, 65535);
   const host = values.host;
+  const allowedOrigins = values['allow-origin'] ?? [];
+  for (const origin of allowedOrigins) {
+    if (!normalizeOrigin(origin)) throw new CliUsageError(`--allow-origin expects an origin like https://example.com, got "${origin}"`);
+  }
 
   // Compiled file lives in dist-server/, the web build in dist/ next to it.
   const staticDir = fileURLToPath(new URL('../dist', import.meta.url));
@@ -83,14 +115,13 @@ async function runServer(argv: string[]): Promise<void> {
     port,
     host,
     staticDir: hasBuild ? staticDir : null,
+    allowedOrigins,
     log: (m) => console.log(`[relay] ${m}`),
   }).catch((err: unknown) => {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'EADDRINUSE') throw new CliUsageError(`port ${port} is already in use; pick another with --port`);
-    if (code === 'EADDRNOTAVAIL') throw new CliUsageError(`address ${host} is not available on this machine`);
-    throw err;
+    const message = listenErrorMessage((err as NodeJS.ErrnoException).code, port, host);
+    throw message ? new CliUsageError(message) : err;
   });
-  printBanner(server.port, host);
+  printBanner(server.port, host, await defaultRouteIPv4());
   installShutdown(() => server.close());
 }
 
@@ -98,7 +129,7 @@ async function runFakeSource(argv: string[]): Promise<void> {
   const { values } = parseArgs({
     args: argv,
     options: {
-      url: { type: 'string', default: `ws://localhost:${DEFAULT_PORT}/ws?role=source` },
+      url: { type: 'string', default: `ws://localhost:${DEFAULT_PORT}` },
       fps: { type: 'string' },
       width: { type: 'string' },
       height: { type: 'string' },
@@ -108,14 +139,18 @@ async function runFakeSource(argv: string[]): Promise<void> {
     allowPositionals: false,
   });
   if (values.help) return void console.log(USAGE);
-  const url = values.url;
   try {
+    const url = normalizeSourceUrl(values.url);
     const source = startFakeDepthSource({
       url,
       fps: intOption('fps', values.fps, 30, 1, 120),
       width: intOption('width', values.width, 256, 1, 4096),
       height: intOption('height', values.height, 192, 1, 4096),
       log: (m) => console.log(`[fake-source] ${m}`),
+      onFatal: (reason) => {
+        console.error(`livesand fake-source: ${reason}`);
+        process.exit(1);
+      },
     });
     console.log(`Streaming fake depth frames to ${url} (Ctrl+C to stop)`);
     installShutdown(async () => source.stop());

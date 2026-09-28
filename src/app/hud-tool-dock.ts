@@ -37,8 +37,15 @@ export class ToolDock {
       attrs: { type: 'range', min: String(BRUSH_RADIUS_MIN), max: String(BRUSH_RADIUS_MAX), step: '1', 'aria-label': 'Brush size' },
     });
     this.slider.addEventListener('input', () => actions.setBrushRadius(Number(this.slider.value)));
-    // Arrow keys on a focused slider would otherwise fight the global shortcuts; release focus after dragging.
-    this.slider.addEventListener('change', () => this.slider.blur());
+    // A mouse/touch drag releases focus so Space and the digit keys go back to the sandbox; keyboard users keep it.
+    let dragging = false;
+    this.slider.addEventListener('pointerdown', () => {
+      dragging = true;
+    });
+    window.addEventListener('pointerup', () => {
+      if (dragging) this.slider.blur();
+      dragging = false;
+    });
 
     const brush = h('label', { class: 'ls-brush' }, [
       h('span', { class: 'ls-brush-title', text: 'Brush' }),

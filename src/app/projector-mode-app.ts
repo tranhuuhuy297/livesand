@@ -2,7 +2,7 @@
 // the iPhone depth stream through PhysicalModeController.
 import { DEFAULT_GRID } from '../core/types';
 import { configureCanvas, type GpuContext } from '../gpu/gpu-context';
-import { getLevel, SANDBOX_LEVEL } from '../game/level-definitions';
+import { BLANK_SANDBOX_LEVEL, getLevel, isFreePlay } from '../game/level-definitions';
 import { urlForMode, type AppUrlParams } from './app-url-params';
 import { CanvasStage } from './canvas-stage';
 import { describeError, showFatalErrorScreen } from './fatal-error-screen';
@@ -67,7 +67,9 @@ export class ProjectorModeApp {
     });
     this.physical.attachProjectorSurface(this.stage.root);
     this.scene = new SandboxGpuScene(gpu, grid, configureCanvas(gpu, this.stage.canvas), projectorRenderStyle(this.physical, grid));
-    const level = params.levelId ? getLevel(params.levelId) : SANDBOX_LEVEL;
+    // Real sand brings its own landscape: free play there is the blank box (no virtual springs on the sand).
+    const picked = params.levelId ? getLevel(params.levelId) : BLANK_SANDBOX_LEVEL;
+    const level = isFreePlay(picked) ? BLANK_SANDBOX_LEVEL : picked;
     this.session = new SandboxSession(this.scene, level, { keepTerrain: true });
     this.loop = new FrameLoop((dt) => this.tick(dt), (err) => this.fail(err));
     this.monitor = new GpuErrorMonitor(gpu.device, (msg) => this.fail(new Error(msg)));
@@ -110,7 +112,7 @@ export class ProjectorModeApp {
       this.session.setHandMask(polled.handMask);
     }
     this.timeSec += dt;
-    this.scene.setStyle({ timeSec: this.timeSec });
+    this.scene.setStyle({ timeSec: this.timeSec, stormLevel: this.session.stormLevel });
     this.session.frame({ dtSim: dt, maxSteps, view: draw ? '2d' : null, camera: null });
   }
 

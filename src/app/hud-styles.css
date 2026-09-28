@@ -4,7 +4,7 @@
 .ls-topbar { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; pointer-events: none; }
 .ls-spacer { flex: 1; pointer-events: none !important; }
 
-.ls-brand { display: flex; align-items: center; gap: 9px; height: 44px; padding: 0 14px 0 8px; border-radius: 13px; background: var(--ls-panel); border: 1px solid var(--ls-border); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: var(--ls-shadow); }
+.ls-brand { display: flex; align-items: center; gap: 9px; height: 44px; color: inherit; text-decoration: none; padding: 0 14px 0 8px; border-radius: 13px; background: var(--ls-panel); border: 1px solid var(--ls-border); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: var(--ls-shadow); }
 .ls-logo { width: 28px; height: 28px; }
 .ls-logo svg { width: 100%; height: 100%; }
 .ls-wordmark { font-weight: 800; font-size: 16px; letter-spacing: -0.01em; background: linear-gradient(90deg, #f3d08a, #7fd7fb); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -32,7 +32,6 @@
 .ls-timer-text { min-width: 40px; font: 700 18px/1 var(--ls-font); font-variant-numeric: tabular-nums; }
 .ls-timer.is-paused .ls-timer-text { color: var(--ls-muted); }
 .ls-timer.is-urgent .ls-timer-text, .ls-timer.is-urgent .ls-icon { color: var(--ls-danger); animation: ls-pulse 1s ease-in-out infinite; }
-.ls-timer.is-free .ls-timer-text { font-size: 14px; }
 .ls-meter { width: 84px; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
 .ls-meter-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #22d3ee, #38bdf8); transition: width 0.25s linear; }
 .ls-timer.is-urgent .ls-meter-fill { background: linear-gradient(90deg, #fb7185, #f87171); }
@@ -47,9 +46,20 @@
 .ls-speed { gap: 4px; }
 .ls-speed-text { font-variant-numeric: tabular-nums; font-size: 12px; min-width: 18px; }
 .ls-topbar > .ls-btn-accent { height: 44px; padding: 0 16px; border-radius: 13px; }
+.ls-github { gap: 6px; padding: 0 10px 0 8px; color: var(--ls-text); background: rgba(255, 255, 255, 0.07); border-color: var(--ls-border); }
+.ls-github:hover { background: rgba(255, 255, 255, 0.14); }
+.ls-github .ls-icon { width: 18px; height: 18px; }
+.ls-free-actions { display: flex; align-items: center; gap: 4px; height: 44px; padding: 3px; border-radius: 13px; }
+.ls-free-actions .ls-btn { height: 36px; color: var(--ls-muted); }
+.ls-free-actions .ls-btn:hover { color: var(--ls-text); }
+.ls-free-rain.is-active { color: #67d4ff; background: rgba(56, 189, 248, 0.16); box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.45); }
+
+/* Left column: village chips with the level briefing tucked underneath, clear of the far side of the box. */
+.ls-side { position: absolute; top: 68px; left: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; pointer-events: none !important; }
+.ls-side > .ls-intro { pointer-events: auto; }
 
 /* Villages */
-.ls-villages { position: absolute; top: 68px; left: 12px; display: grid; gap: 8px; width: 196px; pointer-events: none !important; }
+.ls-villages { display: grid; gap: 8px; width: 196px; pointer-events: none !important; }
 .ls-village { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 10px; row-gap: 6px; padding: 9px 12px; border-radius: 12px; transition: border-color 0.2s, background 0.2s; }
 .ls-village-icon { width: 30px; height: 30px; padding: 6px; border-radius: 9px; background: rgba(52, 211, 153, 0.16); color: var(--ls-safe); }
 .ls-village-icon svg { width: 100%; height: 100%; }
@@ -84,8 +94,8 @@
 .ls-range::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); }
 .ls-range:focus-visible { outline: 2px solid var(--ls-water); outline-offset: 4px; border-radius: 6px; }
 
-/* Level briefing: a short wide banner above the far edge of the box, so no village hides behind it. */
-.ls-intro { position: absolute; top: 68px; left: 50%; transform: translateX(-50%); display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px 24px; width: min(780px, calc(100vw - 440px)); padding: 16px 20px; background: var(--ls-panel-strong); animation: ls-pop 0.25s ease-out; }
+/* Level briefing: a compact card in the left column, so neither the springs nor the villages hide behind it. */
+.ls-intro { display: grid; gap: 14px; width: 320px; padding: 16px 18px; background: var(--ls-panel-strong); animation: ls-pop 0.25s ease-out; }
 .ls-intro-text { min-width: 0; }
 .ls-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ls-sand); }
 .ls-card-title { margin: 2px 0 4px; font-size: 21px; line-height: 1.15; letter-spacing: -0.01em; }
@@ -93,29 +103,33 @@
 .ls-facts { display: flex; flex-wrap: wrap; gap: 6px; }
 .ls-fact { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); font-size: 12px; font-weight: 600; }
 .ls-fact .ls-icon { width: 16px; height: 16px; color: var(--ls-muted); }
-.ls-intro-actions { display: grid; justify-items: center; gap: 8px; }
+.ls-intro-actions { display: flex; align-items: center; gap: 14px; }
 .ls-kbd-hint { margin-left: 4px; background: rgba(0, 0, 0, 0.15); border-color: rgba(0, 0, 0, 0.2); color: inherit; }
 .ls-muted { color: var(--ls-muted); font-size: 12.5px; }
 
-.ls-toast { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); padding: 10px 16px; font-weight: 600; background: var(--ls-panel-strong); animation: ls-pop 0.18s ease-out; pointer-events: none !important; }
+.ls-toast { position: absolute; bottom: 96px; left: 50%; translate: -50% 0; padding: 10px 16px; font-weight: 600; background: var(--ls-panel-strong); animation: ls-pop 0.18s ease-out; pointer-events: none !important; }
 .ls-debug { position: absolute; right: 12px; bottom: 14px; padding: 6px 10px; border-radius: 8px; font: 12px/1.3 var(--ls-mono); color: var(--ls-muted); pointer-events: none !important; }
 
 @media (max-width: 980px) {
-  .ls-intro { top: auto; bottom: 88px; width: min(560px, calc(100vw - 24px)); grid-template-columns: 1fr; }
-  .ls-intro-actions { display: flex; align-items: center; gap: 14px; }
-  .ls-wordmark, .ls-topbar > .ls-btn-accent .ls-btn-label, .ls-segmented .ls-btn-label { display: none; }
-  .ls-villages { width: 168px; }
-  .ls-tool { width: 52px; }
-  .ls-tool-label { display: none; }
-  .ls-tool { height: 48px; align-content: center; }
+  .ls-side { display: contents; }
+  .ls-villages { position: absolute; top: 68px; left: 12px; width: 168px; }
+  .ls-intro { position: absolute; bottom: 88px; left: 50%; translate: -50% 0; width: min(560px, calc(100vw - 24px)); }
+  .ls-wordmark, .ls-topbar > .ls-btn-accent .ls-btn-label, .ls-segmented .ls-btn-label, .ls-free-actions .ls-btn-label { display: none; }
+  .ls-tool { width: 54px; height: 52px; padding: 7px 2px 5px; font-size: 10px; }
+  .ls-tool .ls-icon { width: 22px; height: 22px; }
+}
+/* Touch screens have no keyboard: the digit badges would only be noise. */
+@media (pointer: coarse) {
+  .ls-tool-key { display: none; }
 }
 @media (max-width: 640px) {
-  .ls-intro { top: 112px; bottom: auto; }
+  .ls-intro { bottom: 136px; }
+  .ls-hud.has-intro .ls-villages { display: none; }
   .ls-topbar { gap: 6px; }
   .ls-level-name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
   .ls-meter { width: 56px; }
-  .ls-speed, .ls-fullscreen, .ls-topbar > .ls-btn-accent { display: none; }
-  .ls-villages { top: auto; bottom: 150px; width: auto; grid-auto-flow: column; }
+  .ls-speed, .ls-fullscreen, .ls-topbar > .ls-btn-accent, .ls-github .ls-btn-label { display: none; }
+  .ls-villages { top: auto; bottom: 136px; width: auto; grid-auto-flow: column; }
   .ls-village { padding: 6px 8px; }
   .ls-village-status { display: none; }
   .ls-dock { flex-wrap: wrap; justify-content: center; }

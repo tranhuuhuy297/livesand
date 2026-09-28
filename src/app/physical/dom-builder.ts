@@ -28,7 +28,7 @@ export function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Recor
   return node;
 }
 
-export function button(label: string, onClick: () => void, className = 'ls-btn'): HTMLButtonElement {
+export function button(label: string, onClick: () => void, className = 'lsp-btn'): HTMLButtonElement {
   return el('button', { className, text: label, attrs: { type: 'button' }, on: { click: () => onClick() } });
 }
 
@@ -68,6 +68,6 @@ export function copyButton(getText: () => string, label = 'Copy'): HTMLButtonEle
         btn.classList.remove('is-done');
       }, 1500);
     });
-  }, 'ls-btn ls-btn--ghost ls-btn--small');
+  }, 'lsp-btn lsp-btn--ghost lsp-btn--small');
   return btn;
 }

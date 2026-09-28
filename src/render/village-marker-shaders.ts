@@ -101,7 +101,8 @@ fn shadeVillageRings(p: vec2<f32>, px: f32, t: f32, base: vec3<f32>) -> vec3<f32
     let stateCol = villageStateColor(v.w);
     let inside = 1.0 - smoothstep(v.z - px, v.z + px, d);
     let lost = select(0.0, 1.0, v.w > 1.5);
-    col = mix(col, stateCol * (1.0 - 0.5 * lost), inside * (0.07 + 0.12 * pulse + 0.2 * lost));
+    // A flooding village throbs orange across its whole disc (water included) so the threat is unmissable.
+    col = mix(col, stateCol * (1.0 - 0.5 * lost), inside * (0.07 + 0.3 * pulse + 0.2 * lost));
     let halo = 1.0 - smoothstep(halfW, reach, ringDist);
     col = mix(col, col * 0.18, halo * 0.55);
     let ring = 1.0 - smoothstep(halfW - px, halfW + px, ringDist);

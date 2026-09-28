@@ -1,5 +1,5 @@
 // Terrain sculpting brushes on the CPU heightmap (grid coords, heights in world units).
-import type { GridSize } from '../core/types';
+import type { GridSize, Vec2 } from '../core/types';
 
 export type SculptTool = 'raise' | 'lower' | 'smooth' | 'flatten' | 'rain';
 
@@ -7,6 +7,13 @@ export type SculptTool = 'raise' | 'lower' | 'smooth' | 'flatten' | 'rain';
 export interface BrushSettings {
   radius: number;
   strength: number;
+}
+
+/** Height limits for sculpting; `floor` (per cell) stops digging below it without blocking building up. */
+export interface SculptBounds {
+  min: number;
+  max: number;
+  floor?: Float32Array | null;
 }
 
 interface BrushRect {
@@ -79,10 +86,11 @@ export function applySculptBrush(
   tool: Exclude<SculptTool, 'rain'>,
   brush: BrushSettings,
   dtSec: number,
-  bounds: { min: number; max: number },
+  bounds: SculptBounds,
   flattenTarget?: number,
 ): boolean {
   assertField(heights, grid, 'heights');
+  const floor = bounds.floor && bounds.floor.length === heights.length ? bounds.floor : null;
   if (!(dtSec > 0) || !(brush.strength > 0) || !Number.isFinite(dtSec) || !Number.isFinite(brush.strength)) return false;
   const rect = brushRect(grid, cx, cy, brush.radius);
   if (!rect) return false;
@@ -106,11 +114,50 @@ export function applySculptBrush(
       else if (averages) next = h + (averages[(y - rect.y0) * rw + (x - rect.x0)] - h) * Math.min(1, step * w);
       else next = h + Math.max(-step * w, Math.min(step * w, target - h));
       next = Math.min(hi, Math.max(lo, next));
+      // Protected cells (village ground) can be built up but never dug below their floor.
+      if (floor && next < h && next < floor[i]) next = Math.min(h, floor[i]);
       if (next !== h) {
         heights[i] = next;
         changed = true;
       }
     }
+  }
+  return changed;
+}
+
+/** Drag speed (cells/s) up to which a stroke is timed; faster drags carve as deep as a drag at this speed. */
+export const STROKE_REFERENCE_SPEED = 12;
+// Longer hops between two frames are pointer jumps (3D picking across a ridge), not drags.
+const MAX_STROKE_SEGMENT = 48;
+
+/**
+ * Applies a brush along the segment from `from` (last frame's point, null at stroke start) to `to`. The effective
+ * time is max(dtSec, length / STROKE_REFERENCE_SPEED), so a quick swipe digs the same channel as a careful drag;
+ * stamps sit at most a quarter radius apart so slow frame rates leave no gaps.
+ */
+export function applySculptStroke(
+  heights: Float32Array,
+  grid: GridSize,
+  from: Vec2 | null,
+  to: Vec2,
+  tool: Exclude<SculptTool, 'rain'>,
+  brush: BrushSettings,
+  dtSec: number,
+  bounds: SculptBounds,
+  flattenTarget?: number,
+): boolean {
+  const len = from ? Math.hypot(to.x - from.x, to.y - from.y) : 0;
+  if (!from || !(len > 0) || len > MAX_STROKE_SEGMENT) {
+    return applySculptBrush(heights, grid, to.x, to.y, tool, brush, dtSec, bounds, flattenTarget);
+  }
+  const total = Math.max(dtSec > 0 ? dtSec : 0, len / STROKE_REFERENCE_SPEED);
+  const stamps = Math.max(1, Math.ceil(len / Math.max(0.5, brush.radius * 0.25)));
+  let changed = false;
+  for (let i = 1; i <= stamps; i++) {
+    const f = i / stamps;
+    const x = from.x + (to.x - from.x) * f;
+    const y = from.y + (to.y - from.y) * f;
+    if (applySculptBrush(heights, grid, x, y, tool, brush, total / stamps, bounds, flattenTarget)) changed = true;
   }
   return changed;
 }

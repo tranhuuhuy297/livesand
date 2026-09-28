@@ -4,6 +4,8 @@ export const PERSPECTIVE_SKY_LIGHTING_WGSL = /* wgsl */ `
 const HORIZON_COLOR = vec3<f32>(0.80, 0.87, 0.94);
 const ZENITH_COLOR = vec3<f32>(0.19, 0.41, 0.78);
 const BACKDROP_LOW = vec3<f32>(0.42, 0.50, 0.60);
+const STORM_HORIZON = vec3<f32>(0.45, 0.49, 0.55);
+const STORM_ZENITH = vec3<f32>(0.20, 0.23, 0.29);
 
 fn sunDir() -> vec3<f32> {
   return normalize(vec3<f32>(-0.5, 0.52, 0.42));
@@ -11,9 +13,11 @@ fn sunDir() -> vec3<f32> {
 
 fn skyColor(dir: vec3<f32>) -> vec3<f32> {
   let up = clamp(dir.y, -1.0, 1.0);
-  var col = mix(HORIZON_COLOR, ZENITH_COLOR, pow(max(up, 0.0), 0.55));
+  let storm = frame.effects.y;
+  let k = pow(max(up, 0.0), 0.55);
+  var col = mix(mix(HORIZON_COLOR, ZENITH_COLOR, k), mix(STORM_HORIZON, STORM_ZENITH, k), storm * 0.85);
   let s = max(dot(dir, sunDir()), 0.0);
-  col += vec3<f32>(1.0, 0.86, 0.62) * (pow(s, 700.0) * 2.5 + pow(s, 10.0) * 0.16);
+  col += vec3<f32>(1.0, 0.86, 0.62) * (pow(s, 700.0) * 2.5 + pow(s, 10.0) * 0.16) * (1.0 - storm);
   return col;
 }
 
@@ -22,7 +26,8 @@ fn backdropColor(dir: vec3<f32>) -> vec3<f32> {
   if (dir.y >= 0.0) {
     return skyColor(dir);
   }
-  return mix(HORIZON_COLOR, BACKDROP_LOW, pow(clamp(-dir.y * 1.3, 0.0, 1.0), 0.75));
+  let horizon = mix(HORIZON_COLOR, STORM_HORIZON, frame.effects.y * 0.85);
+  return mix(horizon, BACKDROP_LOW * (1.0 - 0.35 * frame.effects.y), pow(clamp(-dir.y * 1.3, 0.0, 1.0), 0.75));
 }
 
 fn fogColor(dir: vec3<f32>) -> vec3<f32> {
@@ -40,8 +45,9 @@ fn applyFog(col: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
 fn lightSurfaceShadowed(albedo: vec3<f32>, n: vec3<f32>, sunVisible: f32) -> vec3<f32> {
   let diffuse = max(dot(n, sunDir()), 0.0) * sunVisible;
   let hemi = mix(vec3<f32>(0.42, 0.38, 0.33), vec3<f32>(0.62, 0.72, 0.90), n.y * 0.5 + 0.5);
-  let direct = mix(0.62, diffuse, frame.misc.x);
-  return albedo * (hemi * 0.66 + vec3<f32>(1.0, 0.95, 0.86) * direct * 0.8);
+  // Storm clouds swap most of the sunlight for flat grey skylight.
+  let direct = mix(0.62, diffuse, frame.misc.x) * (1.0 - 0.55 * frame.effects.y);
+  return albedo * (hemi * (0.66 - 0.1 * frame.effects.y) + vec3<f32>(1.0, 0.95, 0.86) * direct * 0.8);
 }
 
 fn lightSurface(albedo: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
@@ -56,7 +62,7 @@ fn terrainSunVisibility(gp: vec2<f32>, h: f32) -> f32 {
   let stepDir = sun.xz / horiz;
   let rise = sun.y / horiz / vs; // height gained per grid cell along the ray, in terrain units
   var visible = 1.0;
-  var dist = 1.0 + hash21(gp * 1.37) * 0.8; // jittered start hides step banding in the penumbra
+  var dist = 1.0 + hash21(gp * 87.7) * 0.8; // per-pixel jittered start hides step banding in the penumbra
   for (var i = 0; i < 28; i++) {
     let q = gp + stepDir * dist;
     if (any(q < vec2<f32>(0.0)) || any(q > frame.grid.xy - 1.0)) {

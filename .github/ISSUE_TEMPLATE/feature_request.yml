@@ -1,0 +1,15 @@
+name: Idea or feature request
+description: A new level, tool, depth camera, lesson idea or anything else.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like LiveSand to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Who is it for?
+      description: A classroom, a museum, a maker space, your kids, yourself... Context helps prioritise.

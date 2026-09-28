@@ -10,8 +10,10 @@ struct Frame {
   heightStyle: vec4<f32>,  // minHeight, maxHeight, contourInterval, verticalScale
   misc: vec4<f32>,         // hillshade on/off, timeSec, villageCount, base plane y (world)
   viewport: vec4<f32>,     // width px, height px, fog start, fog density
+  effects: vec4<f32>,      // sea level (display only), storm 0..1, source count, 2D map turned a quarter (0/1)
   villages: array<vec4<f32>, 16>,    // x, y, radius (grid units), state code (0 safe, 1 flooding, 2 lost)
   villageInfo: array<vec4<f32>, 16>, // flood01, unused...
+  sources: array<vec4<f32>, 8>,      // springs: x, y, radius (grid units), unused
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var<storage, read> terrainBuf: array<f32>;

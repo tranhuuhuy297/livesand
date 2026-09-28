@@ -3,7 +3,9 @@ import { WebSocket } from 'ws';
 import { decodeDepthFrame } from '../../src/core/depth-frame-protocol';
 import { DEPTH_FRAME_HEADER_BYTES, DEPTH_FRAME_MAGIC } from '../../server/depth-frame-encoder.js';
 import { startFakeDepthSource } from '../../server/fake-depth-source.js';
-import { delay, isStatus, runCleanups, trackCleanup, startTestRelay, testClient, wsUrl } from './relay-server-test-helpers';
+import {
+  asControl, delay, depthFrame, isStatus, runCleanups, trackCleanup, startTestRelay, testClient, wsUrl,
+} from './relay-server-test-helpers';
 
 afterEach(runCleanups);
 
@@ -16,7 +18,7 @@ describe('relay server websockets', () => {
     const src = testClient(server.port, 'role=source');
     await Promise.all([v1.waitFor(isStatus(1, 2)), v2.waitFor(isStatus(1, 2)), src.opened]);
 
-    const frame = Buffer.from([0x4c, 0x53, 0x44, 0x31, 1, 2, 3, 4]);
+    const frame = depthFrame(3);
     src.ws.send(frame);
     const [m1, m2] = await Promise.all([v1.waitFor((m) => m.isBinary), v2.waitFor((m) => m.isBinary)]);
     expect(m1.data.equals(frame)).toBe(true);
@@ -37,24 +39,36 @@ describe('relay server websockets', () => {
     v2.ws.close();
     await v1.waitFor(isStatus(0, 1));
     expect(server.stats()).toMatchObject({ sources: 0, viewers: 1 });
-    expect(src.inbox).toEqual([]); // sources never get status or frames
+    expect(src.inbox.filter((m) => !asControl(m, 'hello'))).toEqual([]); // sources never get status or frames
   });
 
-  it('ignores source text messages and anything viewers send', async () => {
+  it('ignores source text, non-LSD1 binaries and anything viewers send', async () => {
     const server = await startTestRelay();
     const v1 = testClient(server.port, 'role=viewer');
     const v2 = testClient(server.port, 'role=viewer');
     const src = testClient(server.port, 'role=source');
     await Promise.all([v1.waitFor(isStatus(1, 2)), v2.waitFor(isStatus(1, 2)), src.opened]);
     src.ws.send('not a frame');
-    v1.ws.send(Buffer.from([9, 9, 9]));
+    v1.ws.send(depthFrame(1));
     src.ws.send(Buffer.from([7]));
+    src.ws.send(depthFrame(9).subarray(0, 30)); // truncated payload
+    src.ws.send(depthFrame(7));
     const got = await v2.waitFor((m) => m.isBinary);
-    expect([...got.data]).toEqual([7]);
+    expect(got.data.equals(depthFrame(7))).toBe(true);
     await delay(100);
     expect(v2.inbox.filter((m) => m.isBinary || m.data.toString() === 'not a frame')).toEqual([]);
-    expect(src.inbox).toEqual([]);
+    expect(src.inbox.filter((m) => !asControl(m, 'hello') && !asControl(m, 'ack'))).toEqual([]);
     expect(server.stats().framesRelayed).toBe(1);
+  });
+
+  it('greets sources with ack support and acks every binary message, frame index included when valid', async () => {
+    const server = await startTestRelay();
+    const src = testClient(server.port, 'role=source');
+    expect(asControl(await src.waitFor((m) => asControl(m, 'hello') !== null), 'hello')).toEqual({ type: 'hello', role: 'source', acks: true });
+    src.ws.send(depthFrame(41));
+    src.ws.send(Buffer.from([1, 2, 3]));
+    expect(asControl(await src.waitFor((m) => asControl(m, 'ack') !== null), 'ack')).toEqual({ type: 'ack', frameIndex: 41 });
+    expect(asControl(await src.waitFor((m) => asControl(m, 'ack') !== null), 'ack')).toEqual({ type: 'ack' });
   });
 
   it.each(['', 'role=bogus', 'role='])('closes connections with query "%s" using code 1008', async (query) => {
@@ -81,7 +95,7 @@ describe('relay server websockets', () => {
     slow.ws.pause(); // stop reading: TCP backpressure builds up on the relay side
 
     const frameCount = 64;
-    const frame = Buffer.alloc(1024 * 1024, 1);
+    const frame = depthFrame(0, 1024, 512); // 1 MiB of uint16 depth
     // Paced by the fast viewer so only the paused viewer ever builds a backlog.
     for (let i = 0; i < frameCount; i++) {
       src.ws.send(frame);

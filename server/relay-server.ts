@@ -1,15 +1,24 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
-import { advertisedHosts, urlHost } from './lan-addresses.js';
+import { isOriginAllowed, normalizeOrigin } from './relay-origin-policy.js';
+import { sendPairingInfo, WS_PATH } from './relay-pairing-endpoint.js';
+import type { RelayLimits } from './relay-peer-limits.js';
 import { RelayWebSocketHub } from './relay-websocket-hub.js';
 import { sendPlainText, serveStaticFile } from './static-file-handler.js';
+
+export { buildPairingInfo, type PairingInfo } from './relay-pairing-endpoint.js';
 
 export interface RelayServerOptions {
   port: number;
   host?: string;
   staticDir?: string | null;
   log?: (msg: string) => void;
+  /** Extra browser origins (e.g. a self-hosted copy of the web app) allowed to use the relay. */
+  allowedOrigins?: string[];
+  /** Interval of the viewer status keepalive; the ping heartbeat runs every third tick. */
+  keepaliveMs?: number;
+  limits?: RelayLimits;
 }
 
 export interface RelayServer {
@@ -17,20 +26,6 @@ export interface RelayServer {
   close(): Promise<void>;
   stats(): { sources: number; viewers: number; framesRelayed: number };
 }
-
-export interface PairingInfo {
-  sourceUrls: string[];
-  viewerUrls: string[];
-  port: number;
-}
-
-const WS_PATH = '/ws';
-const PAIRING_CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-  // Chrome's Private Network Access preflight: lets a public origin (e.g. GitHub Pages) read LAN pairing info.
-  'Access-Control-Allow-Private-Network': 'true',
-};
 
 function parseRequestUrl(rawUrl: string | undefined): URL | null {
   try {
@@ -40,64 +35,40 @@ function parseRequestUrl(rawUrl: string | undefined): URL | null {
   }
 }
 
-function hostnameFromHeader(hostHeader: string | undefined): string | null {
-  if (!hostHeader) return null;
-  try {
-    return new URL(`http://${hostHeader}/`).hostname || null;
-  } catch {
-    return null;
-  }
-}
-
-/** Relay URLs for other devices; falls back to the host the requester used when no LAN address exists. */
-export function buildPairingInfo(bindHost: string | undefined, port: number, requestHost?: string): PairingInfo {
-  let hosts = advertisedHosts(bindHost);
-  if (hosts.length === 0) hosts = [hostnameFromHeader(requestHost) ?? '127.0.0.1'];
-  const wsUrl = (host: string, role: string) => `ws://${urlHost(host)}:${port}${WS_PATH}?role=${role}`;
-  return {
-    sourceUrls: hosts.map((h) => wsUrl(h, 'source')),
-    viewerUrls: hosts.map((h) => wsUrl(h, 'viewer')),
-    port,
-  };
-}
-
 function rejectUpgrade(socket: Duplex, status: number, reason: string): void {
   socket.on('error', () => {}); // peer may already be gone; nothing useful to report
   socket.once('finish', () => socket.destroy());
   socket.end(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 }
 
+function originSet(origins: string[] | undefined): Set<string> {
+  const set = new Set<string>();
+  for (const raw of origins ?? []) {
+    const origin = normalizeOrigin(raw);
+    if (!origin) throw new TypeError(`not a valid origin: "${raw}" (expected e.g. https://example.com)`);
+    set.add(origin);
+  }
+  return set;
+}
+
 /** Starts the HTTP + WebSocket relay; resolves once listening (port 0 picks an ephemeral port). */
 export function startRelayServer(opts: RelayServerOptions): Promise<RelayServer> {
   const log = opts.log ?? (() => {});
   const staticDir = opts.staticDir ?? null;
-  const hub = new RelayWebSocketHub(log);
+  let allowedOrigins: Set<string>;
+  try {
+    allowedOrigins = originSet(opts.allowedOrigins);
+  } catch (err) {
+    return Promise.reject(err);
+  }
+  const hub = new RelayWebSocketHub({ log, keepaliveMs: opts.keepaliveMs, limits: opts.limits });
   let boundPort = opts.port;
   let closePromise: Promise<void> | null = null;
-
-  const sendPairing = (req: IncomingMessage, res: ServerResponse): void => {
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204, PAIRING_CORS_HEADERS).end();
-      return;
-    }
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      sendPlainText(res, 405, 'Method not allowed', { ...PAIRING_CORS_HEADERS, Allow: 'GET, HEAD, OPTIONS' });
-      return;
-    }
-    const body = JSON.stringify(buildPairingInfo(opts.host, boundPort, req.headers.host));
-    res.writeHead(200, {
-      ...PAIRING_CORS_HEADERS,
-      'Content-Type': 'application/json; charset=utf-8',
-      'Content-Length': Buffer.byteLength(body),
-      'Cache-Control': 'no-store',
-    });
-    res.end(body);
-  };
 
   const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const url = parseRequestUrl(req.url);
     if (!url) return sendPlainText(res, 400, 'Bad request');
-    if (url.pathname === '/pairing.json') return sendPairing(req, res);
+    if (url.pathname === '/pairing.json') return sendPairingInfo(req, res, { bindHost: opts.host, port: boundPort, allowedOrigins });
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       return sendPlainText(res, 405, 'Method not allowed', { Allow: 'GET, HEAD' });
     }
@@ -120,7 +91,18 @@ export function startRelayServer(opts: RelayServerOptions): Promise<RelayServer>
     const url = parseRequestUrl(req.url);
     if (closePromise) return rejectUpgrade(socket, 503, 'Service Unavailable');
     if (!url || url.pathname !== WS_PATH) return rejectUpgrade(socket, 404, 'Not Found');
-    hub.handleUpgrade(req, socket, head, url.searchParams.get('role'));
+    const role = url.searchParams.get('role');
+    const peer = req.socket.remoteAddress ?? 'unknown';
+    if (!isOriginAllowed(req.headers.origin, req.headers.host, role === 'source' ? 'source' : 'viewer', allowedOrigins)) {
+      log(`refused ${role ?? 'role-less'} websocket from ${peer}: origin ${req.headers.origin} is not allowed`);
+      return rejectUpgrade(socket, 403, 'Forbidden');
+    }
+    const refusal = hub.refusal(role, peer);
+    if (refusal) {
+      log(`refused ${role} websocket from ${peer}: ${refusal}`);
+      return rejectUpgrade(socket, 503, 'Service Unavailable');
+    }
+    hub.handleUpgrade(req, socket, head, role);
   });
 
   const close = (): Promise<void> => {

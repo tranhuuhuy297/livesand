@@ -41,12 +41,12 @@ export class KeystoneEditor {
   open(initial: Quad): void {
     this.close();
     this.quad = copyQuad(initial);
-    const layer = el('div', 'ls-keystone-layer');
-    const corners = CORNER_LABELS.map((label, i) => el('span', { className: `ls-kgrid-corner ls-kgrid-corner--${i}`, text: label }));
-    this.pattern = el('div', 'ls-keystone-grid', [
+    const layer = el('div', 'lsp-keystone-layer');
+    const corners = CORNER_LABELS.map((label, i) => el('span', { className: `lsp-kgrid-corner lsp-kgrid-corner--${i}`, text: label }));
+    this.pattern = el('div', 'lsp-keystone-grid', [
       ...corners,
-      el('span', { className: 'ls-kgrid-top', text: '▲ top of the projected image ▲' }),
-      el('span', 'ls-kgrid-cross'),
+      el('span', { className: 'lsp-kgrid-top', text: '▲ top of the projected image ▲' }),
+      el('span', 'lsp-kgrid-cross'),
     ]);
     layer.append(this.pattern);
     this.host.append(layer);

@@ -16,21 +16,22 @@ export function wireVirtualModeInput(app: VirtualModeApp): VirtualModeInput {
     geometry: () => app.geometry(),
     tool: () => app.tool,
     brushRadius: () => app.brushRadius,
-    changeBrushRadius: (d) => app.setBrushRadius(app.brushRadius + d),
-    sculptBounds: () => ({ min: 0, max: app.relief }),
-    onStrokeStart: () => {
-      // Touching the terrain during the briefing starts the level, so "just start digging" works.
-      if (app.session.game.phase === 'ready' && app.session.level.villages.length > 0) app.startLevel();
-    },
+    changeBrushRadius: (d) => app.actions.setBrushRadius(app.brushRadius + d),
+    sculptBounds: () => ({ min: 0, max: app.relief, floor: app.session.sculptFloor }),
+    onStrokeStart: () => app.actions.onStrokeStart(),
   });
+  // Dialogs that pause the game also keep Enter/R from starting or restarting it out of sight.
+  const unlessPaused = (fn: () => void) => () => {
+    if (!app.hud.pausesGame) fn();
+  };
   const detachKeys = installKeyboardShortcuts({
-    setTool: (t) => app.setTool(t),
+    setTool: (t) => app.actions.setTool(t),
     toggleView: () => app.setView(app.view === '2d' ? '3d' : '2d'),
-    resetLevel: () => app.resetLevel(),
-    startLevel: () => app.startLevel(),
-    changeBrush: (d) => app.setBrushRadius(app.brushRadius + d),
+    resetLevel: unlessPaused(() => app.actions.resetLevel()),
+    startLevel: unlessPaused(() => app.actions.startLevel()),
+    changeBrush: (d) => app.actions.setBrushRadius(app.brushRadius + d),
     toggleHelp: () => app.hud.toggleHelp(),
-    toggleFullscreen: () => app.toggleFullscreen(),
+    toggleFullscreen: () => app.actions.toggleFullscreen(),
     setSpaceHeld: (held) => pointer.setSpaceHeld(held),
     escape: () => app.hud.closeOverlays(),
   });

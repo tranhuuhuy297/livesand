@@ -11,6 +11,21 @@ function isDevServerPort(port: string): boolean {
   return n === 4173 || (n >= 5100 && n <= 5199);
 }
 
+/** IP literals, localhost and LAN-only names (.local, single label): where a relay started with `npx livesand` lives. */
+function isLocalNetworkHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return /^\[.*\]$/.test(h) || /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || !h.includes('.') || /\.(local|lan|home|internal|localhost)$/.test(h);
+}
+
+/**
+ * The relay serves the app on an explicit port (default 8787) or a LAN name; static hosts (GitHub Pages, Netlify, a
+ * custom domain) use default ports on public names, and the Vite dev server never relays.
+ */
+export function isServedByRelay(loc: Pick<Location, 'protocol' | 'hostname' | 'port'>, devServer: boolean): boolean {
+  if (devServer || (loc.protocol !== 'http:' && loc.protocol !== 'https:') || isDevServerPort(loc.port)) return false;
+  return loc.port !== '' || isLocalNetworkHostname(loc.hostname);
+}
+
 /**
  * Accepts `ws(s)://host:port[/ws]`, `http(s)://host:port` or bare `host:port` and returns the relay WS URL
  * for `role`. Throws TypeError when it cannot be a relay URL.
@@ -30,7 +45,7 @@ export function normalizeRelayUrl(raw: string, role: RelayRole = 'viewer'): stri
 }
 
 /** ws(s)://<page host>/ws?role=viewer when this page is served by the relay, else the local relay default; ?relay= wins. */
-export function defaultRelayUrl(loc: Location): string {
+export function defaultRelayUrl(loc: Location, devServer: boolean = import.meta.env.DEV): string {
   const override = new URLSearchParams(loc.search).get('relay');
   if (override) {
     try {
@@ -39,10 +54,7 @@ export function defaultRelayUrl(loc: Location): string {
       console.warn(`Ignoring invalid ?relay= value: ${(err as Error).message}`);
     }
   }
-  const httpPage = loc.protocol === 'http:' || loc.protocol === 'https:';
-  // GitHub Pages hosts the static demo only; the relay then runs on the visitor's own machine.
-  const servedByRelay = httpPage && !isDevServerPort(loc.port) && !/(^|\.)github\.io$/i.test(loc.hostname);
-  if (servedByRelay) return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws?role=viewer`;
+  if (isServedByRelay(loc, devServer)) return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws?role=viewer`;
   return FALLBACK_VIEWER_URL;
 }
 

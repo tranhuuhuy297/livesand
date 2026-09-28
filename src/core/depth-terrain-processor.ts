@@ -2,6 +2,7 @@
 import { DepthGridResampler } from './depth-bilinear-resampler';
 import { assertValidGrid, cloneQuad, validateDepthCalibration, type DepthCalibration } from './depth-calibration';
 import type { DepthFrame } from './depth-frame-protocol';
+import { dilateMask, MaskedGaussianBlur } from './depth-grid-filters';
 import type { GridSize } from './types';
 
 export type { DepthCalibration } from './depth-calibration';
@@ -37,29 +38,13 @@ function assertFrame(frame: DepthFrame): void {
   }
 }
 
-/** 3x3 dilation: bilinear samples at hand edges mix hand and sand depth and would read as fake peaks. */
-function dilateMask(src: Uint8Array, dst: Uint8Array, grid: GridSize): void {
-  const { width: w, height: h } = grid;
-  for (let y = 0; y < h; y++) {
-    const y0 = Math.max(0, y - 1), y1 = Math.min(h - 1, y + 1);
-    for (let x = 0; x < w; x++) {
-      const x0 = Math.max(0, x - 1), x1 = Math.min(w - 1, x + 1);
-      let v = 0;
-      for (let yy = y0; yy <= y1 && v === 0; yy++) {
-        for (let xx = x0; xx <= x1; xx++) {
-          if (src[yy * w + xx]) { v = 1; break; }
-        }
-      }
-      dst[y * w + x] = v;
-    }
-  }
-}
-
 export class DepthTerrainProcessor {
   private readonly grid: GridSize;
   private cal: DepthCalibration;
   private resampler: DepthGridResampler | null = null;
-  private readonly heights: Float32Array;  // published, hysteresis-gated heights
+  private blur: MaskedGaussianBlur | null = null;
+  private readonly held: Float32Array;     // hysteresis-gated per-cell heights
+  private readonly heights: Float32Array;  // published: `held`, spatially smoothed
   private readonly filtered: Float32Array; // per-cell EMA state
   private readonly seeded: Uint8Array;     // 1 once a cell had a valid sand sample since the last re-base
   private readonly rawHand: Uint8Array;
@@ -74,6 +59,7 @@ export class DepthTerrainProcessor {
     this.cal = copyCalibration(calibration);
     const n = grid.width * grid.height;
     const base = clamp(0, calibration.minHeight, calibration.maxHeight);
+    this.held = new Float32Array(n).fill(base);
     this.heights = new Float32Array(n).fill(base);
     this.filtered = new Float32Array(n).fill(base);
     this.seeded = new Uint8Array(n);
@@ -95,6 +81,7 @@ export class DepthTerrainProcessor {
     validateDepthCalibration(next, this.grid);
     this.cal = copyCalibration(next);
     if (REBASE_KEYS.some((k) => k in defined)) this.rebase();
+    if ('spatialSigma' in defined) this.pendingChange = true;
   }
 
   /** Per-cell depth (m) via the ROI homography + invalid-aware bilinear sampling; 0 = invalid. */
@@ -117,7 +104,7 @@ export class DepthTerrainProcessor {
     return ref;
   }
 
-  /** Heights persist across frames (EMA + hysteresis); hand and invalid cells keep their last value. */
+  /** Heights persist across frames (EMA + hysteresis, then a spatial blur); hand and invalid cells keep their last value. */
   process(frame: DepthFrame): DepthProcessResult {
     const depth = this.resampleInto(frame, this.depthScratch);
     const {
@@ -144,17 +131,26 @@ export class DepthTerrainProcessor {
         // First valid sample since (re)start: take it directly instead of easing in from a stale value.
         this.seeded[i] = 1;
         this.filtered[i] = target;
-        if (this.heights[i] !== target) { this.heights[i] = target; changed = true; }
+        if (this.held[i] !== target) { this.held[i] = target; changed = true; }
         continue;
       }
       const f = Math.fround(this.filtered[i] + smoothing * (target - this.filtered[i]));
       this.filtered[i] = f;
-      if (f !== this.heights[i] && Math.abs(f - this.heights[i]) >= changeThreshold) {
-        this.heights[i] = f;
+      if (f !== this.held[i] && Math.abs(f - this.held[i]) >= changeThreshold) {
+        this.held[i] = f;
         changed = true;
       }
     }
+    if (changed) this.publish();
     return { heights: this.heights.slice(), handMask: this.handMask.slice(), changed };
+  }
+
+  /** Smooths the held heights over cells that have seen sand; unseen cells never pull their neighbours down. */
+  private publish(): void {
+    const sigma = this.cal.spatialSigma;
+    if (!(sigma > 0)) return void this.heights.set(this.held);
+    if (this.blur?.sigma !== sigma) this.blur = new MaskedGaussianBlur(this.grid, sigma);
+    this.blur.apply(this.held, this.seeded, this.heights);
   }
 
   private resampleInto(frame: DepthFrame, out: Float32Array): Float32Array {
@@ -169,9 +165,9 @@ export class DepthTerrainProcessor {
   private rebase(): void {
     const { minHeight, maxHeight } = this.cal;
     this.seeded.fill(0);
-    for (let i = 0; i < this.heights.length; i++) {
-      this.heights[i] = clamp(this.heights[i], minHeight, maxHeight);
-      this.filtered[i] = this.heights[i];
+    for (let i = 0; i < this.held.length; i++) {
+      this.held[i] = clamp(this.held[i], minHeight, maxHeight);
+      this.filtered[i] = this.held[i];
     }
     this.pendingChange = true;
   }

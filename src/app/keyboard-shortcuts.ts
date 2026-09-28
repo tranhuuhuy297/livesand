@@ -20,6 +20,11 @@ export function installKeyboardShortcuts(actions: ShortcutActions): () => void {
   const onKeyDown = (ev: KeyboardEvent): void => {
     if (ev.ctrlKey || ev.metaKey || isTypingTarget(ev.target)) return;
     const onButton = ev.target instanceof HTMLButtonElement || ev.target instanceof HTMLAnchorElement;
+    // A held Space (orbit) whose auto-repeat lands on a freshly focused button must not arm it to click on release.
+    if (ev.key === ' ' && ev.repeat) {
+      ev.preventDefault();
+      return;
+    }
     // Space/Enter on a focused button must activate that button, not the global shortcut.
     if (onButton && (ev.key === ' ' || ev.key === 'Enter')) return;
     const tool = ev.altKey ? null : toolForKey(ev.key);

@@ -1,21 +1,26 @@
 // Virtual-mode HUD: top bar (brand, level picker, timer/storm, view + actions), village chips, tool dock and dialogs.
 import './hud-styles.css';
 import type { ViewMode } from './app-url-params';
-import { h, iconButton, setHidden, setText } from './hud-dom-helpers';
+import { FreePlayActions } from './hud-free-play-actions';
+import { h, iconButton, linkButton, setHidden, setText } from './hud-dom-helpers';
 import { GameStatusBar, VillageChips } from './hud-game-status';
 import { ICONS } from './hud-icons';
-import { createHelpDialog, createRealSandboxDialog } from './hud-info-dialogs';
-import { LevelIntroCard, ResultDialog } from './hud-level-cards';
+import { createHelpDialog, createRealSandboxDialog, PROJECT_REPO_URL } from './hud-info-dialogs';
+import { LevelIntroCard } from './hud-level-cards';
 import { LevelPicker } from './hud-level-picker';
 import type { HudModal } from './hud-modal';
+import { ResultDialog } from './hud-result-dialog';
 import type { HudActions, HudSnapshot } from './hud-snapshot';
+import { StormOverlay } from './hud-storm-overlay';
 import { ToolDock } from './hud-tool-dock';
 
 export class VirtualModeHud {
   readonly root: HTMLDivElement;
   private readonly picker: LevelPicker;
   private readonly status = new GameStatusBar();
+  private readonly freePlay: FreePlayActions;
   private readonly chips = new VillageChips();
+  private readonly storm = new StormOverlay();
   private readonly dock: ToolDock;
   private readonly intro: LevelIntroCard;
   private readonly result: ResultDialog;
@@ -30,6 +35,7 @@ export class VirtualModeHud {
 
   constructor(actions: HudActions) {
     this.picker = new LevelPicker(actions);
+    this.freePlay = new FreePlayActions(actions);
     this.dock = new ToolDock(actions);
     this.intro = new LevelIntroCard(actions);
     this.result = new ResultDialog(actions);
@@ -45,29 +51,34 @@ export class VirtualModeHud {
     const speed = iconButton(ICONS.speed, 'Simulation speed', () => actions.cycleSpeed(), { class: 'ls-speed' });
     speed.append(this.speedText);
     const realButton = iconButton(ICONS.projector, 'Real sandbox', () => this.real.open(), { class: 'ls-btn-accent', showLabel: true });
+    const star = linkButton(ICONS.github, 'Star', PROJECT_REPO_URL, 'ls-github');
+    star.title = 'Star LiveSand on GitHub';
+    const brand = h('a', { class: 'ls-brand', title: 'LiveSand on GitHub', attrs: { href: PROJECT_REPO_URL, target: '_blank', rel: 'noopener noreferrer' } }, [
+      h('span', { class: 'ls-logo', html: ICONS.logo, attrs: { 'aria-hidden': 'true' } }),
+      h('span', { class: 'ls-wordmark', text: 'LiveSand' }),
+    ]);
 
     const topbar = h('header', { class: 'ls-topbar' }, [
-      h('div', { class: 'ls-brand' }, [
-        h('span', { class: 'ls-logo', html: ICONS.logo, attrs: { 'aria-hidden': 'true' } }),
-        h('span', { class: 'ls-wordmark', text: 'LiveSand' }),
-      ]),
+      brand,
       this.picker.root,
       this.status.root,
+      this.freePlay.root,
       h('div', { class: 'ls-spacer' }),
       h('div', { class: 'ls-actions ls-glass' }, [
         viewToggle,
         speed,
         iconButton(ICONS.help, 'Help', () => this.help.toggle(), { kbd: 'H' }),
         iconButton(ICONS.fullscreen, 'Fullscreen', () => actions.toggleFullscreen(), { kbd: 'F', class: 'ls-fullscreen' }),
+        star,
       ]),
       realButton,
     ]);
     this.toast.hidden = true;
     this.debugLine.hidden = true;
     this.root = h('div', { class: 'ls-hud' }, [
+      this.storm.root,
       topbar,
-      this.chips.root,
-      this.intro.root,
+      h('div', { class: 'ls-side' }, [this.chips.root, this.intro.root]),
       this.dock.root,
       this.toast,
       this.debugLine,
@@ -80,6 +91,9 @@ export class VirtualModeHud {
   update(s: HudSnapshot): void {
     this.picker.update(s);
     this.status.update(s);
+    this.freePlay.update(s);
+    this.storm.update(s.stormLevel);
+    this.root.classList.toggle('has-intro', s.phase === 'ready' && s.villages.length > 0);
     this.chips.update(s);
     this.dock.update(s);
     this.intro.update(s);
@@ -96,6 +110,11 @@ export class VirtualModeHud {
 
   toggleHelp(): void {
     this.help.toggle();
+  }
+
+  /** Help, the real-sandbox dialog or the level menu is open: the level clock and the water wait. */
+  get pausesGame(): boolean {
+    return this.help.isOpen || this.real.isOpen || this.picker.isOpen;
   }
 
   /** Esc: closes the topmost overlay; returns false when nothing was open. */

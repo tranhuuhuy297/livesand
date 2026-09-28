@@ -5,6 +5,10 @@
 export const DEPTH_FRAME_MAGIC = 0x3144534c;
 export const DEPTH_FRAME_HEADER_BYTES = 28;
 export const DEPTH_FRAME_VERSION = 1;
+// Checked before allocating: a huge but byte-exact frame would otherwise freeze or crash the tab (LiDAR is 256x192).
+// Mirrored in server/depth-frame-encoder.ts, which also sizes the relay's message limit from them.
+export const MAX_DEPTH_SIDE = 4096;
+export const MAX_DEPTH_PIXELS = 1024 * 1024;
 
 /** Payload encoding; an invalid pixel is 0 in either format. */
 export enum DepthFormat {
@@ -37,6 +41,10 @@ export class DepthFrameDecodeError extends Error {
   }
 }
 
+function exceedsDepthLimits(width: number, height: number): boolean {
+  return width > MAX_DEPTH_SIDE || height > MAX_DEPTH_SIDE || width * height > MAX_DEPTH_PIXELS;
+}
+
 function bytesPerPixel(format: number): number {
   if (format === DepthFormat.Float32Meters) return 4;
   if (format === DepthFormat.Uint16Millimeters) return 2;
@@ -45,7 +53,7 @@ function bytesPerPixel(format: number): number {
 
 export function encodeDepthFrame(input: EncodeDepthFrameInput): ArrayBuffer {
   const { width, height, format, timestampMs, frameIndex, data } = input;
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width > 0xffffffff || height > 0xffffffff) {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || exceedsDepthLimits(width, height)) {
     throw new RangeError(`Invalid depth frame size ${width}x${height}`);
   }
   if (!Number.isInteger(frameIndex) || frameIndex < 0) throw new RangeError(`Invalid frameIndex ${frameIndex}`);
@@ -102,6 +110,9 @@ export function decodeDepthFrame(buf: ArrayBuffer | Uint8Array): DepthFrame {
   const width = view.getUint32(8, true);
   const height = view.getUint32(12, true);
   if (width === 0 || height === 0) throw new DepthFrameDecodeError(`Invalid depth frame size ${width}x${height}`);
+  if (exceedsDepthLimits(width, height)) {
+    throw new DepthFrameDecodeError(`Depth frame ${width}x${height} is larger than the ${MAX_DEPTH_PIXELS}-pixel limit`);
+  }
   const count = width * height;
   const expected = DEPTH_FRAME_HEADER_BYTES + count * bpp;
   if (view.byteLength !== expected) {

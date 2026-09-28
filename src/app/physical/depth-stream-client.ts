@@ -1,5 +1,7 @@
 // Viewer-side relay connection: decodes LSD1 frames, keeps only the newest, estimates fps, reconnects with backoff.
 import { decodeDepthFrame, type DepthFrame } from '../../core/depth-frame-protocol';
+import { FrameArrivalRateMeter } from './frame-arrival-rate-meter';
+import { RelaySilenceWatchdog } from './relay-silence-watchdog';
 
 export type RelayConnectionState = 'connecting' | 'open' | 'closed';
 
@@ -11,10 +13,21 @@ export interface DepthStreamClientOptions {
 
 const RETRY_MIN_MS = 500;
 const RETRY_MAX_MS = 8000;
-const FPS_WINDOW_MS = 1000;
+// A gap this long means the stream restarted, which is worth an onChange (status goes live again).
+const IDLE_GAP_MS = 1000;
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Silences a socket's handlers and closes it without waiting for (or reacting to) the close handshake. */
+function detach(ws: WebSocket, code: number, reason: string): void {
+  ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
+  try {
+    ws.close(code, reason);
+  } catch {
+    // Already closing; nothing else to release.
+  }
 }
 
 export class DepthStreamClient {
@@ -22,6 +35,7 @@ export class DepthStreamClient {
   private readonly onChange: () => void;
   private socket: WebSocket | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly watchdog = new RelaySilenceWatchdog(() => this.handleSilence());
   private retryMs = RETRY_MIN_MS;
   private nextRetryAt = 0;
   private running = false;
@@ -30,7 +44,7 @@ export class DepthStreamClient {
   private latest: DepthFrame | null = null;
   private seq = 0;
   private lastAt = 0;
-  private readonly arrivals: number[] = [];
+  private readonly rate = new FrameArrivalRateMeter();
   private error: string | null = null;
 
   constructor(opts: DepthStreamClientOptions) {
@@ -70,10 +84,7 @@ export class DepthStreamClient {
   }
 
   fps(now = performance.now()): number {
-    const a = this.arrivals;
-    while (a.length > 0 && now - a[0] > FPS_WINDOW_MS) a.shift();
-    if (a.length < 2) return 0;
-    return ((a.length - 1) * 1000) / Math.max(1, a[a.length - 1] - a[0]);
+    return this.rate.fps(now);
   }
 
   start(): void {
@@ -86,16 +97,10 @@ export class DepthStreamClient {
     this.running = false;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
+    this.watchdog.stop();
     const ws = this.socket;
     this.socket = null;
-    if (ws) {
-      ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
-      try {
-        ws.close(1000, 'viewer stopped');
-      } catch {
-        // Already closing; nothing else to release.
-      }
-    }
+    if (ws) detach(ws, 1000, 'viewer stopped');
     this.connState = 'closed';
     this.sourceCount = 0;
   }
@@ -119,9 +124,13 @@ export class DepthStreamClient {
       this.retryMs = RETRY_MIN_MS;
       this.connState = 'open';
       this.error = null;
+      this.watchdog.start();
       this.onChange();
     };
-    ws.onmessage = (ev: MessageEvent) => this.handleMessage(ev.data);
+    ws.onmessage = (ev: MessageEvent) => {
+      this.watchdog.heard();
+      this.handleMessage(ev.data);
+    };
     ws.onerror = () => {
       this.error = `Cannot reach the relay at ${this.url}`;
     };
@@ -129,8 +138,18 @@ export class DepthStreamClient {
     this.onChange();
   }
 
+  /** The link is dead even though the browser still reports it open: drop it and redial. */
+  private handleSilence(): void {
+    const ws = this.socket;
+    if (!ws) return;
+    this.error = `The relay at ${this.url} went silent; reconnecting`;
+    detach(ws, 4000, 'no data from the relay');
+    this.handleClose(ws);
+  }
+
   private handleClose(ws: WebSocket): void {
     if (this.socket !== ws) return;
+    this.watchdog.stop();
     this.socket = null;
     this.connState = 'closed';
     this.sourceCount = 0;
@@ -158,12 +177,11 @@ export class DepthStreamClient {
     }
     const prev = this.latest;
     const now = performance.now();
-    const wasIdle = now - this.lastAt > FPS_WINDOW_MS;
+    const wasIdle = now - this.lastAt > IDLE_GAP_MS;
     this.latest = frame;
     this.seq++;
     this.lastAt = now;
-    this.arrivals.push(now);
-    if (this.arrivals.length > 240) this.arrivals.shift();
+    this.rate.record(now);
     if (wasIdle || !prev || prev.width !== frame.width || prev.height !== frame.height) this.onChange();
   }
 

@@ -1,7 +1,8 @@
 // Real-socket helpers for relay server tests: buffered WS inbox with predicate waits, raw HTTP requests.
-import { request, type IncomingHttpHeaders } from 'node:http';
-import { WebSocket } from 'ws';
-import { startRelayServer, type RelayServer } from '../../server/relay-server.js';
+import { request, type IncomingHttpHeaders, type OutgoingHttpHeaders } from 'node:http';
+import { WebSocket, type ClientOptions } from 'ws';
+import { DepthFormat, encodeDepthFrame } from '../../server/depth-frame-encoder.js';
+import { startRelayServer, type RelayServer, type RelayServerOptions } from '../../server/relay-server.js';
 
 export const TEST_HOST = '127.0.0.1';
 
@@ -43,9 +44,26 @@ export function isStatus(sources: number, viewers: number): (m: InboxMessage) =>
   };
 }
 
+/** Parses a JSON text message of the given type (e.g. 'ack', 'hello'), or null for anything else. */
+export function asControl(m: InboxMessage, type: string): Record<string, unknown> | null {
+  if (m.isBinary) return null;
+  try {
+    const parsed = JSON.parse(m.data.toString('utf8')) as Record<string, unknown>;
+    return parsed.type === type ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A valid LSD1 uint16 frame, as the iPhone app or fake source would send it. */
+export function depthFrame(frameIndex = 0, width = 4, height = 3, fill = 1000): Buffer {
+  const data = new Uint16Array(width * height).fill(fill);
+  return Buffer.from(encodeDepthFrame({ width, height, format: DepthFormat.Uint16Millimeters, timestampMs: 0, frameIndex, data }));
+}
+
 /** Opens a WS client whose messages are buffered from the first byte, so nothing sent right after open is lost. */
-export function connectClient(url: string): TestClient {
-  const ws = new WebSocket(url);
+export function connectClient(url: string, options?: ClientOptions): TestClient {
+  const ws = new WebSocket(url, options);
   const inbox: InboxMessage[] = [];
   const waiters: { predicate: (m: InboxMessage) => boolean; resolve: (m: InboxMessage) => void }[] = [];
   ws.on('message', (data, isBinary) => {
@@ -86,9 +104,9 @@ export interface RawHttpResponse {
 }
 
 /** Sends the path verbatim (no client-side URL normalization) so traversal attempts reach the server intact. */
-export function rawHttp(port: number, rawPath: string, method = 'GET'): Promise<RawHttpResponse> {
+export function rawHttp(port: number, rawPath: string, method = 'GET', headers: OutgoingHttpHeaders = {}): Promise<RawHttpResponse> {
   return new Promise((resolve, reject) => {
-    const req = request({ host: TEST_HOST, port, path: rawPath, method, agent: false }, (res) => {
+    const req = request({ host: TEST_HOST, port, path: rawPath, method, headers, agent: false }, (res) => {
       const chunks: Buffer[] = [];
       res.on('data', (c: Buffer) => chunks.push(c));
       res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }));
@@ -111,15 +129,15 @@ export async function runCleanups(): Promise<void> {
 }
 
 /** Relay on an ephemeral loopback port, closed automatically after the test. */
-export async function startTestRelay(staticDir: string | null = null): Promise<RelayServer> {
-  const server = await startRelayServer({ port: 0, host: TEST_HOST, staticDir });
+export async function startTestRelay(staticDir: string | null = null, opts: Partial<RelayServerOptions> = {}): Promise<RelayServer> {
+  const server = await startRelayServer({ port: 0, host: TEST_HOST, staticDir, ...opts });
   trackCleanup(() => server.close());
   return server;
 }
 
 /** WS client to the relay, terminated automatically after the test. */
-export function testClient(port: number, query: string): TestClient {
-  const c = connectClient(wsUrl(port, query));
+export function testClient(port: number, query: string, options?: ClientOptions): TestClient {
+  const c = connectClient(wsUrl(port, query), options);
   trackCleanup(() => c.ws.terminate());
   return c;
 }

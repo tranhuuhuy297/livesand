@@ -1,18 +1,19 @@
 // CPU-side sandbox shared by virtual and projector modes: heightmap, emission, level + game, fixed-step sim timing.
 import type { GridSize } from '../core/types';
-import type { LevelDefinition } from '../game/level-definitions';
+import { sourceMarkers } from '../game/emission-field';
+import { isFreePlay, peakStormRain, type LevelDefinition } from '../game/level-definitions';
 import { generateTerrain } from '../game/terrain-generators';
-import { buildEmissionField, VillageFloodGame } from '../game/village-flood-game';
-import { paintRainBrush } from '../input/sculpt-tools';
+import { VillageFloodGame } from '../game/village-flood-game';
+import { buildVillageSculptFloor } from '../game/village-sculpt-floor';
 import type { OrbitCamera } from '../render/orbit-camera';
 import type { ViewMode } from './app-url-params';
 import type { SandboxGpuScene } from './sandbox-gpu-scene';
+import { SessionEmissionField } from './session-emission-field';
 
 /** Real-time cap on sim steps per frame; a slow frame drops sim time instead of spiralling. */
 export const MAX_STEPS_PER_FRAME = 8;
-/** Rain brush and hand rain intensity at the centre (world units/s per cell). */
-export const BRUSH_RAIN_RATE = 0.4;
-export const HAND_RAIN_RATE = 0.5;
+/** Global rain of the free-play "Make it rain" toggle (units/s per cell): enough to pool in every hollow. */
+export const FREE_PLAY_RAIN_RATE = 0.004;
 
 export interface SessionFrameOptions {
   /** Simulated seconds to advance (already scaled by any speed-up). */
@@ -20,6 +21,8 @@ export interface SessionFrameOptions {
   maxSteps: number;
   view: ViewMode | null;
   camera: OrbitCamera | null;
+  /** 2D only: map turned a quarter for portrait screens. */
+  rotated?: boolean;
 }
 
 export class SandboxSession {
@@ -28,28 +31,22 @@ export class SandboxSession {
   totalSteps = 0;
   lastSteps = 0;
   private readonly scene: SandboxGpuScene;
-  private readonly brushRain: Float32Array;
-  private readonly emission: Float32Array;
+  private readonly emission: SessionEmissionField;
+  private readonly keepTerrain: boolean;
   private currentLevel!: LevelDefinition;
   private currentGame!: VillageFloodGame;
-  private readonly keepTerrain: boolean;
-  private handMask: Uint8Array | null = null;
-  private handVersion = 0;
-  private brushActive = false;
-  private brushFrame = 0;
-  private emissionKey = '';
   private terrainDirty = true;
   private accumulator = 0;
   private levelVersion = 0;
+  private floor: Float32Array | null = null;
+  private freeRain = false;
 
   /** keepTerrain: the heightmap comes from outside (depth camera), so levels never regenerate it. */
   constructor(scene: SandboxGpuScene, level: LevelDefinition, opts: { keepTerrain: boolean }) {
     this.scene = scene;
     this.grid = scene.sim.grid;
-    const cells = this.grid.width * this.grid.height;
-    this.heights = new Float32Array(cells);
-    this.brushRain = new Float32Array(cells);
-    this.emission = new Float32Array(cells);
+    this.heights = new Float32Array(this.grid.width * this.grid.height);
+    this.emission = new SessionEmissionField(this.grid);
     this.keepTerrain = opts.keepTerrain;
     this.loadLevel(level);
   }
@@ -66,24 +63,50 @@ export class SandboxSession {
     return this.scene.sim.params.dt;
   }
 
-  /** Levels wait on their intro card with the water frozen; free play (no villages) runs immediately. */
+  /** Levels wait on their intro card with the water frozen after the prefill; free play runs immediately. */
   get simRunning(): boolean {
     return this.currentGame.phase !== 'ready';
   }
 
-  /** Loads (or restarts) a level: fresh terrain unless external, dry map, new game in the ready phase. */
+  /** Village ground may be built up but not dug below its loaded height (null: no villages or external terrain). */
+  get sculptFloor(): Float32Array | null {
+    return this.floor;
+  }
+
+  /** 0..1 storm strength for the rain visuals: the level storm relative to its peak, or the free-play rain toggle. */
+  get stormLevel(): number {
+    if (isFreePlay(this.currentLevel)) return this.freeRain ? 1 : 0;
+    const peak = peakStormRain(this.currentLevel);
+    if (!(peak > 0) || this.currentGame.phase !== 'running') return 0;
+    return Math.min(1, Math.max(0, this.currentGame.currentRainRate() / peak));
+  }
+
+  get freePlayRain(): boolean {
+    return this.freeRain;
+  }
+
+  /** Free play only: global rain on or off. */
+  setFreePlayRain(on: boolean): void {
+    this.freeRain = on && isFreePlay(this.currentLevel);
+  }
+
+  /** Loads (or restarts) a level: fresh terrain unless external, springs pre-run, new game in the ready phase. */
   loadLevel(level: LevelDefinition): void {
     this.currentLevel = level;
     this.currentGame = new VillageFloodGame(level, this.grid);
+    if (!isFreePlay(level)) this.freeRain = false;
     if (!this.keepTerrain) this.heights.set(generateTerrain(this.grid, level.recipe));
+    this.floor = this.keepTerrain ? null : buildVillageSculptFloor(this.heights, this.grid, this.currentGame.villages);
     this.terrainDirty = true;
     this.scene.setOpenEdges(level.openEdges);
     this.scene.sim.clearWater();
     this.scene.setProbes(this.currentGame.probes());
     this.scene.setVillages(this.currentGame.markers());
+    this.scene.setSources(sourceMarkers(this.grid, level.sources));
     this.accumulator = 0;
     this.levelVersion++;
-    if (level.villages.length === 0) this.currentGame.start();
+    this.prefill(level);
+    if (isFreePlay(level)) this.currentGame.start();
   }
 
   startGame(): void {
@@ -98,23 +121,16 @@ export class SandboxSession {
   }
 
   setHandMask(mask: Uint8Array | null): void {
-    this.handMask = mask && mask.length === this.heights.length ? mask : null;
-    this.handVersion++;
+    this.emission.setHandMask(mask);
   }
 
   /** Rain follows the cursor: the field is repainted every frame the brush is held and cleared when released. */
   paintBrushRain(cx: number, cy: number, radius: number): void {
-    this.brushRain.fill(0);
-    paintRainBrush(this.brushRain, this.grid, cx, cy, radius, BRUSH_RAIN_RATE);
-    this.brushActive = true;
-    this.brushFrame++;
+    this.emission.paintBrush(cx, cy, radius);
   }
 
   clearBrushRain(): void {
-    if (!this.brushActive) return;
-    this.brushRain.fill(0);
-    this.brushActive = false;
-    this.brushFrame++;
+    this.emission.clearBrush();
   }
 
   /** One frame: uploads, fixed sim steps, probes, drawing, then the game clock advances by the simulated time. */
@@ -133,7 +149,7 @@ export class SandboxSession {
     }
     this.updateEmission();
     this.scene.setVillages(this.currentGame.markers());
-    this.scene.submitFrame({ steps, view: opts.view, camera: opts.camera });
+    this.scene.submitFrame({ steps, view: opts.view, camera: opts.camera, rotated: opts.rotated });
     this.lastSteps = steps;
     this.totalSteps += steps;
     if (steps > 0) this.currentGame.update(steps * dt, this.scene.probeValues());
@@ -143,14 +159,21 @@ export class SandboxSession {
     return this.scene.sim.readWater();
   }
 
+  /** Runs the springs for the level's prefill time so the first frame already shows rivers and a filling lake. */
+  private prefill(level: LevelDefinition): void {
+    const steps = this.keepTerrain ? 0 : Math.round((level.prefillSec ?? 0) / this.simDt);
+    if (!(steps > 0)) return;
+    this.scene.sim.uploadTerrain(this.heights);
+    this.terrainDirty = false;
+    this.updateEmission();
+    this.scene.runSteps(steps);
+  }
+
   private updateEmission(): void {
     const game = this.currentGame;
-    const rain = game.phase === 'running' ? game.currentRainRate() : 0;
-    const key = `${this.levelVersion}|${rain}|${this.brushFrame}|${this.handVersion}`;
-    if (key === this.emissionKey) return;
-    this.emissionKey = key;
-    const brush = this.brushActive ? this.brushRain : null;
-    buildEmissionField(this.grid, this.currentLevel.sources, rain, brush, this.handMask, HAND_RAIN_RATE, this.emission);
-    this.scene.sim.uploadEmission(this.emission);
+    const freeRain = this.freeRain && isFreePlay(this.currentLevel) ? FREE_PLAY_RAIN_RATE : 0;
+    const rain = game.phase === 'running' ? game.currentRainRate() + freeRain : 0;
+    const field = this.emission.update(this.levelVersion, this.currentLevel.sources, rain);
+    if (field) this.scene.sim.uploadEmission(field);
   }
 }

@@ -104,7 +104,7 @@ export class PhysicalModeController {
     if (this.started) return;
     this.started = true;
     ensurePhysicalStyles();
-    this.layer = el('div', 'ls-phys');
+    this.layer = el('div', 'lsp-phys');
     this.uiRoot.append(this.layer);
     this.pairing = new PairingPanel(this.layer, this.relayUrl);
     if (this.surfaceEl) this.surface.attach(this.surfaceEl);

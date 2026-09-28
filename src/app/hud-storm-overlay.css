@@ -1,0 +1,37 @@
+/* Storm overlay: two parallax layers of slanted rain streaks (GPU-composited transforms) and a lightning flash. */
+.ls-storm-fx { position: absolute; inset: 0; overflow: hidden; pointer-events: none !important; opacity: calc(var(--storm, 0) * 0.85); transition: opacity 0.8s ease; }
+.ls-rain-layer {
+  position: absolute;
+  left: -25%;
+  width: 150%;
+  top: calc(-1 * var(--tile-h));
+  height: calc(100% + 2 * var(--tile-h));
+  transform: rotate(10deg);
+  background-size: var(--tile-w) var(--tile-h);
+  animation: ls-rain-fall var(--fall) linear infinite;
+  will-change: transform;
+}
+.ls-rain-layer.is-far {
+  --tile-w: 113px;
+  --tile-h: 131px;
+  --fall: 0.34s;
+  opacity: 0.55;
+  background-image:
+    radial-gradient(0.8px 12px at 12% 18%, rgba(226, 238, 252, 0.8), transparent),
+    radial-gradient(0.8px 10px at 47% 71%, rgba(226, 238, 252, 0.7), transparent),
+    radial-gradient(0.8px 14px at 83% 42%, rgba(226, 238, 252, 0.75), transparent),
+    radial-gradient(0.8px 9px at 64% 5%, rgba(226, 238, 252, 0.6), transparent);
+}
+.ls-rain-layer.is-near {
+  --tile-w: 197px;
+  --tile-h: 223px;
+  --fall: 0.3s;
+  background-image:
+    radial-gradient(1.2px 24px at 22% 34%, rgba(235, 244, 255, 0.75), transparent),
+    radial-gradient(1.2px 20px at 71% 12%, rgba(235, 244, 255, 0.65), transparent),
+    radial-gradient(1.4px 28px at 54% 78%, rgba(235, 244, 255, 0.7), transparent);
+}
+.ls-lightning { position: absolute; inset: 0; opacity: 0; background: radial-gradient(120% 90% at 35% 0%, rgba(236, 242, 255, 0.95), rgba(190, 205, 235, 0.35) 55%, transparent 85%); mix-blend-mode: screen; }
+
+@keyframes ls-rain-fall { from { transform: rotate(10deg) translateY(0); } to { transform: rotate(10deg) translateY(var(--tile-h)); } }
+@media (prefers-reduced-motion: reduce) { .ls-rain-layer { animation: none; } }

@@ -1,5 +1,5 @@
 // Level picker: a pill showing the current level that opens a menu of levels plus free play.
-import { LEVELS, SANDBOX_LEVEL, type LevelDefinition } from '../game/level-definitions';
+import { BLANK_SANDBOX_LEVEL, isFreePlay, LEVELS, SANDBOX_LEVEL, type LevelDefinition } from '../game/level-definitions';
 import { h, setText } from './hud-dom-helpers';
 import { ICONS } from './hud-icons';
 import type { HudActions, HudSnapshot } from './hud-snapshot';
@@ -26,18 +26,18 @@ export class LevelPicker {
     });
 
     const entries: [LevelDefinition, string][] = LEVELS.map((level, i) => [level, String(i + 1)]);
-    entries.push([SANDBOX_LEVEL, '∞']);
+    entries.push([SANDBOX_LEVEL, '∞'], [BLANK_SANDBOX_LEVEL, '□']);
     this.menu = h('div', { class: 'ls-menu ls-glass', attrs: { role: 'menu', 'aria-label': 'Levels' } }, entries.map(([level, tag]) => {
       const item = h('button', { class: 'ls-menu-item', attrs: { type: 'button', role: 'menuitemradio', 'aria-checked': 'false' } }, [
         h('span', { class: 'ls-level-badge', text: tag }),
         h('span', { class: 'ls-menu-text' }, [
-          h('span', { class: 'ls-menu-title', text: level.id === SANDBOX_LEVEL.id ? 'Free play' : level.name }),
+          h('span', { class: 'ls-menu-title', text: level.name }),
           h('span', { class: 'ls-menu-sub', text: describe(level) }),
         ]),
       ]);
       item.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        this.setOpen(false);
+        this.setOpen(false, ev.detail === 0);
         actions.selectLevel(level.id);
       });
       this.items.set(level.id, item);
@@ -46,17 +46,21 @@ export class LevelPicker {
     this.menu.hidden = true;
     this.root = h('div', { class: 'ls-level-picker' }, [this.button, this.menu]);
     document.addEventListener('pointerdown', (ev) => {
-      if (!this.menu.hidden && !this.root.contains(ev.target as Node)) this.setOpen(false);
+      if (!this.menu.hidden && !this.root.contains(ev.target as Node)) this.setOpen(false, false);
     });
   }
 
   update(s: HudSnapshot): void {
     if (this.currentId === s.level.id) return;
     this.currentId = s.level.id;
-    const sandbox = s.levelIndex < 0;
-    setText(this.badge, sandbox ? '∞' : String(s.levelIndex + 1));
-    setText(this.label, sandbox ? 'Free play' : s.level.name);
+    const blank = s.level.id === BLANK_SANDBOX_LEVEL.id;
+    setText(this.badge, s.levelIndex >= 0 ? String(s.levelIndex + 1) : blank ? '□' : '∞');
+    setText(this.label, s.level.name);
     for (const [id, item] of this.items) item.setAttribute('aria-checked', String(id === s.level.id));
+  }
+
+  get isOpen(): boolean {
+    return !this.menu.hidden;
   }
 
   /** Closes the menu; returns whether it was open (for Esc handling). */
@@ -66,7 +70,9 @@ export class LevelPicker {
     return wasOpen;
   }
 
-  private setOpen(open: boolean): void {
+  private setOpen(open: boolean, restoreFocus = true): void {
+    // Keyboard users closing the menu (Esc, Enter on an item) land back on the picker, not on <body>.
+    if (!open && restoreFocus && this.menu.contains(document.activeElement)) this.button.focus({ preventScroll: true });
     this.menu.hidden = !open;
     this.button.setAttribute('aria-expanded', String(open));
     if (open) (this.items.get(this.currentId) ?? this.menu.querySelector('button'))?.focus({ preventScroll: true });
@@ -74,7 +80,8 @@ export class LevelPicker {
 }
 
 function describe(level: LevelDefinition): string {
-  if (level.villages.length === 0) return 'Sculpt, dig and make it rain. No clock.';
+  if (level.id === BLANK_SANDBOX_LEVEL.id) return 'An empty flat box: build everything yourself.';
+  if (isFreePlay(level)) return 'Rivers to reshape, rain on demand. No clock.';
   const n = level.villages.length;
   const storm = level.storm.some((k) => k.rain > 0) ? ' · storm' : '';
   return `${n} ${n === 1 ? 'village' : 'villages'} · ${Math.round(level.durationSec)} s${storm}`;
