@@ -42,9 +42,11 @@ checks).
 ## CI
 
 `.github/workflows/ci.yml` runs on pushes to `main`, pull requests and manual dispatch (Ubuntu, Node 22):
-`npm ci` → `npm run typecheck` → `npm test` → `npm run build` → `npx playwright install --with-deps chromium` →
-`npm run test:e2e`. The e2e suite runs WebGPU on SwiftShader, so no GPU runner is needed. On failure the
-`e2e-screens/` and `test-results/` folders are uploaded as an artifact.
+`npm ci` → `npm run typecheck` → `npm test` → `npm run build` (about 1 minute).
+
+End-to-end tests are not run in CI: GitHub runners have no GPU, so WebGPU is emulated on the CPU and the suite takes
+about 40 minutes there. Run `npm run test:e2e` locally before merging (about 10 minutes on a machine with a GPU). The
+CI steps are kept commented out in `ci.yml`; uncomment them (and raise `timeout-minutes`) to run e2e in CI again.
 
 ## The relay: `npx livesand`
 
