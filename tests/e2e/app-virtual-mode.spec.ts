@@ -2,16 +2,7 @@
 // 2D/3D switching, the WebGPU-unavailable screen, plus screenshots for visual review.
 import { mkdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import {
-  APP_TEST_OPTIONS,
-  SCREENS_DIR,
-  appState,
-  dragOnCanvas,
-  heightsDelta,
-  openApp,
-  stepFrames,
-  watchConsole,
-} from './app-e2e-test-helpers';
+import { APP_TEST_OPTIONS, SCREENS_DIR, appState, dragOnCanvas, heightsDelta, openApp, revealResult, stepFrames, watchConsole } from './app-e2e-test-helpers';
 import { scaled } from './e2e-timing';
 
 test.use(APP_TEST_OPTIONS);
@@ -62,14 +53,18 @@ test('idle play on the first level floods the village and loses in time', async 
   expect((await appState(page)).phase).toBe('running');
 
   let state = await appState(page);
-  for (let guard = 0; guard < 40 && state.phase === 'running'; guard++) {
-    await stepFrames(page, 10, 0.5);
+  // Short batches, so the loss is caught within a second of sim time.
+  for (let guard = 0; guard < 200 && state.phase === 'running'; guard++) {
+    await stepFrames(page, 2, 0.5, false);
     state = await appState(page);
   }
   expect(state.phase).toBe('lost');
   expect(state.durationSec).not.toBeNull();
   expect(state.elapsedSec).toBeLessThanOrEqual(state.durationSec!);
   expect(state.villages.every((v) => v.state === 'lost')).toBe(true);
+  await stepFrames(page, 1, 1 / 60);
+  await expect(page.locator('.ls-result')).toBeHidden(); // the flooded village first, then the card
+  await revealResult(page);
   await expect(page.locator('.ls-result')).toBeVisible();
   await expect(page.locator('.ls-result .ls-modal-title')).toHaveText('Flooded!');
   await page.screenshot({ path: `${SCREENS_DIR}app-result.png` });
@@ -111,6 +106,7 @@ test('one quick swipe from the village to the sea saves the first level', async 
   }
   expect(state.phase).toBe('won');
   expect(state.villages.every((v) => v.state !== 'lost')).toBe(true);
+  await revealResult(page);
   await expect(page.locator('.ls-result .ls-modal-title')).toHaveText('Every village is safe!');
   await expect(page.locator('.ls-result .ls-star.is-lit')).toHaveCount(3);
   await expect(page.locator('.ls-result .ls-star-link')).toHaveAttribute('href', /github\.com/);

@@ -11,8 +11,8 @@ import {
 } from '../../src/game/terrain-generators';
 import { applyTerrainOp, smoothstep } from '../../src/game/terrain-shaping-primitives';
 
-const KINDS: TerrainKind[] = ['river-valley', 'twin-valleys', 'mountain-basin', 'flat'];
-const SHAPED: TerrainKind[] = ['river-valley', 'twin-valleys', 'mountain-basin'];
+const KINDS: TerrainKind[] = ['river-valley', 'twin-valleys', 'mountain-basin', 'volcano', 'flat'];
+const SHAPED: TerrainKind[] = ['river-valley', 'twin-valleys', 'mountain-basin', 'volcano'];
 
 function range(a: Float32Array): [number, number] {
   let lo = Infinity;
@@ -120,7 +120,7 @@ describe('generateTerrain', () => {
     expect(() => generateTerrain({ width: 10.5, height: 10 }, { kind: 'flat', seed: 1 })).toThrow(RangeError);
     expect(() => generateTerrain(DEFAULT_GRID, { kind: 'flat', seed: 1, relief: -1 })).toThrow(RangeError);
     expect(() => generateTerrain(DEFAULT_GRID, { kind: 'flat', seed: Number.NaN })).toThrow(RangeError);
-    expect(() => generateTerrain(DEFAULT_GRID, { kind: 'volcano' as TerrainKind, seed: 1 })).toThrow(/Unknown terrain kind/);
+    expect(() => generateTerrain(DEFAULT_GRID, { kind: 'glacier' as TerrainKind, seed: 1 })).toThrow(/Unknown terrain kind/);
   });
 });
 

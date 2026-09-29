@@ -4,7 +4,7 @@ import { ValueNoise2D } from './seeded-value-noise';
 import { TERRAIN_LAYOUTS } from './terrain-layouts';
 import { applyTerrainOp } from './terrain-shaping-primitives';
 
-export type TerrainKind = 'river-valley' | 'twin-valleys' | 'mountain-basin' | 'flat';
+export type TerrainKind = 'river-valley' | 'twin-valleys' | 'mountain-basin' | 'volcano' | 'flat';
 
 export interface TerrainRecipe {
   kind: TerrainKind;

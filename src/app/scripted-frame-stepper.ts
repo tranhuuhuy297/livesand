@@ -15,13 +15,14 @@ function yieldToEventLoop(): Promise<void> {
   });
 }
 
-/** Runs `n` frames of `dtSec`; `frame(dt, draw)` draws only on the last one to keep fast-forwarding cheap. */
+/** Runs `n` frames of `dtSec`; `frame(dt, draw)` draws only on the last one (none unless `drawLast`) to keep fast-forwarding cheap. */
 export async function stepFramesScripted(
   loop: FrameLoop,
   device: GPUDevice,
   n: number,
   dtSec: number,
   frame: (dtSec: number, draw: boolean) => void,
+  drawLast = true,
 ): Promise<void> {
   if (!Number.isInteger(n) || n < 0 || n > MAX_SCRIPTED_FRAMES) {
     throw new RangeError(`stepFrames: n must be an integer in [0, ${MAX_SCRIPTED_FRAMES}], got ${n}`);
@@ -31,7 +32,7 @@ export async function stepFramesScripted(
   }
   await loop.runPaused(async () => {
     for (let i = 0; i < n; i++) {
-      frame(dtSec, i === n - 1);
+      frame(dtSec, drawLast && i === n - 1);
       // Waiting for the GPU keeps probe readbacks one frame behind at most, as in live play.
       await device.queue.onSubmittedWorkDone();
       await yieldToEventLoop();

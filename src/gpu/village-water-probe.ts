@@ -1,11 +1,17 @@
 // GPU max-water-depth probes for villages, read back asynchronously so the frame loop never waits on the GPU.
-import type { WaterSimPipes } from './water-sim-pipes';
+import type { GridSize } from '../core/types';
 import { PROBE_PARAMS_BYTES, PROBE_RECORD_BYTES, PROBE_SHADER_WGSL } from './village-water-probe-shaders';
 
 export interface WaterProbe {
   x: number;
   y: number;
   radius: number;
+}
+
+/** Any per-cell f32 depth field (the water sim, or lava depths passed as `water`). */
+export interface ProbedDepthField {
+  readonly grid: GridSize;
+  readonly buffers: { readonly water: GPUBuffer };
 }
 
 type ReadbackState = 'idle' | 'encoded' | 'mapping';
@@ -30,7 +36,7 @@ export class VillageWaterProbe {
   private values: Float32Array | null = null;
   private destroyed = false;
 
-  constructor(device: GPUDevice, sim: WaterSimPipes, maxProbes = 16) {
+  constructor(device: GPUDevice, sim: ProbedDepthField, maxProbes = 16) {
     if (!Number.isInteger(maxProbes) || maxProbes < 1 || maxProbes > device.limits.maxComputeWorkgroupsPerDimension) {
       throw new RangeError(`VillageWaterProbe: maxProbes must be a positive integer, got ${maxProbes}`);
     }

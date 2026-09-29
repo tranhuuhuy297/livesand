@@ -1,0 +1,234 @@
+{
+  "version": 1,
+  "format": "LSP1 uint16 quantized meters",
+  "grid": {
+    "width": 256,
+    "height": 192
+  },
+  "source": "AWS Terrain Tiles (Terrarium)",
+  "places": [
+    {
+      "id": "ha-long-bay",
+      "name": "Ha Long Bay",
+      "file": "ha-long-bay.bin",
+      "width": 256,
+      "height": 192,
+      "zoom": 11,
+      "center": {
+        "lat": 20.88,
+        "lon": 107.1
+      },
+      "widthKm": 25,
+      "bbox": {
+        "west": 106.97982,
+        "south": 20.79587,
+        "east": 107.22018,
+        "north": 20.96408
+      },
+      "minMeters": -245.3,
+      "maxMeters": 284.2,
+      "metersPerCell": 98.04,
+      "sources": [
+        "gmted",
+        "srtm"
+      ],
+      "attribution": "Terrain Tiles by Mapzen via the AWS Registry of Open Data; global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey.",
+      "bytes": 98328
+    },
+    {
+      "id": "hoi-an",
+      "name": "Hoi An",
+      "file": "hoi-an.bin",
+      "width": 256,
+      "height": 192,
+      "zoom": 12,
+      "center": {
+        "lat": 15.88,
+        "lon": 108.35
+      },
+      "widthKm": 14,
+      "bbox": {
+        "west": 108.28462,
+        "south": 15.83289,
+        "east": 108.41538,
+        "north": 15.92709
+      },
+      "minMeters": -19.8,
+      "maxMeters": 50.7,
+      "metersPerCell": 54.9,
+      "sources": [
+        "gmted",
+        "srtm"
+      ],
+      "attribution": "Terrain Tiles by Mapzen via the AWS Registry of Open Data; global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey.",
+      "bytes": 98328
+    },
+    {
+      "id": "hue",
+      "name": "Hue",
+      "file": "hue.bin",
+      "width": 256,
+      "height": 192,
+      "zoom": 12,
+      "center": {
+        "lat": 16.485,
+        "lon": 107.595
+      },
+      "widthKm": 16,
+      "bbox": {
+        "west": 107.52005,
+        "south": 16.43116,
+        "east": 107.66995,
+        "north": 16.53882
+      },
+      "minMeters": -23.4,
+      "maxMeters": 101.9,
+      "metersPerCell": 62.75,
+      "sources": [
+        "gmted",
+        "srtm"
+      ],
+      "attribution": "Terrain Tiles by Mapzen via the AWS Registry of Open Data; global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey.",
+      "bytes": 98328
+    },
+    {
+      "id": "fansipan",
+      "name": "Fansipan",
+      "file": "fansipan.bin",
+      "width": 256,
+      "height": 192,
+      "zoom": 11,
+      "center": {
+        "lat": 22.31,
+        "lon": 103.8
+      },
+      "widthKm": 20,
+      "bbox": {
+        "west": 103.7029,
+        "south": 22.2427,
+        "east": 103.8971,
+        "north": 22.37727
+      },
+      "minMeters": 613.2,
+      "maxMeters": 3096.9,
+      "metersPerCell": 78.43,
+      "sources": [
+        "gmted",
+        "srtm"
+      ],
+      "attribution": "Terrain Tiles by Mapzen via the AWS Registry of Open Data; global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey.",
+      "bytes": 98328
+    },
+    {
+      "id": "grand-canyon",
+      "name": "Grand Canyon",
+      "file": "grand-canyon.bin",
+      "width": 256,
+      "height": 192,
+      "zoom": 11,
+      "center": {
+        "lat": 36.1,
+        "lon": -112.1
+      },
+      "widthKm": 30,
+      "bbox": {
+        "west": -112.26677,
+        "south": 35.99901,
+        "east": -111.93323,
+        "north": 36.20086
+      },
+      "minMeters": 693.7,
+      "maxMeters": 2562.4,
+      "metersPerCell": 117.65,
+      "sources": [
+        "ned13"
+      ],
+      "attribution": "Terrain Tiles by Mapzen via the AWS Registry of Open Data; United States 3DEP (formerly NED) terrain data courtesy of the U.S. Geological Survey.",
+      "bytes": 98328
+    },
+    {
+      "id": "mount-fuji",
+      "name": "Mount Fuji",
+      "file": "mount-fuji.bin",
+      "width": 256,
+      "height": 192,
+      "zoom": 10,
+      "center": {
+        "lat": 35.38,
+        "lon": 138.73
+      },
+      "widthKm": 40,
+      "bbox": {
+        "west": 138.50964,
+        "south": 35.24532,
+        "east": 138.95036,
+        "north": 35.51446
+      },
+      "minMeters": 129.8,
+      "maxMeters": 3707.7,
+      "metersPerCell": 156.86,
+      "sources": [
+        "etopo1",
+        "gmted",
+        "srtm"
+      ],
+      "attribution": "Terrain Tiles by Mapzen via the AWS Registry of Open Data; global GMTED2010 and SRTM terrain data courtesy of the U.S. Geological Survey; Global ETOPO1 terrain data U.S. National Oceanic and Atmospheric Administration.",
+      "bytes": 98328
+    },
+    {
+      "id": "yosemite",
+      "name": "Yosemite Valley",
+      "file": "yosemite.bin",
+      "width": 256,
+      "height": 192,
+      "zoom": 12,
+      "center": {
+        "lat": 37.74,
+        "lon": -119.585
+      },
+      "widthKm": 15,
+      "bbox": {
+        "west": -119.6702,
+        "south": 37.68952,
+        "east": -119.4998,
+        "north": 37.79045
+      },
+      "minMeters": 1176.9,
+      "maxMeters": 2755.4,
+      "metersPerCell": 58.82,
+      "sources": [
+        "ned13"
+      ],
+      "attribution": "Terrain Tiles by Mapzen via the AWS Registry of Open Data; United States 3DEP (formerly NED) terrain data courtesy of the U.S. Geological Survey.",
+      "bytes": 98328
+    },
+    {
+      "id": "mount-st-helens",
+      "name": "Mount St. Helens",
+      "file": "mount-st-helens.bin",
+      "width": 256,
+      "height": 192,
+      "zoom": 11,
+      "center": {
+        "lat": 46.225,
+        "lon": -122.18
+      },
+      "widthKm": 22,
+      "bbox": {
+        "west": -122.32283,
+        "south": 46.15094,
+        "east": -122.03717,
+        "north": 46.29896
+      },
+      "minMeters": 453.6,
+      "maxMeters": 2519.1,
+      "metersPerCell": 86.27,
+      "sources": [
+        "ned",
+        "ned13"
+      ],
+      "attribution": "Terrain Tiles by Mapzen via the AWS Registry of Open Data; United States 3DEP (formerly NED) terrain data courtesy of the U.S. Geological Survey.",
+      "bytes": 98328
+    }
+  ]
+}

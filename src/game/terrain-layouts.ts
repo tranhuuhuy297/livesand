@@ -2,6 +2,7 @@
 // exactly where the carved hydrology sends the water. Heights are fractions of relief; u,v in 0..1 (north = v 0).
 import type { TerrainKind } from './terrain-generators';
 import { lerp, smoothstep, type LayoutPoint, type TerrainOp } from './terrain-shaping-primitives';
+import { volcanoLayout } from './volcano-terrain-layout';
 
 export interface TerrainLayout {
   /** Smooth landform before noise and carving. */
@@ -152,5 +153,6 @@ export const TERRAIN_LAYOUTS = {
   'river-valley': riverValley,
   'twin-valleys': twinValleys,
   'mountain-basin': mountainBasin,
+  volcano: volcanoLayout,
   flat,
 } satisfies Record<TerrainKind, TerrainLayout>;

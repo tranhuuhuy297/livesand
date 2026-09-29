@@ -1,11 +1,14 @@
-// 3D demo view: sky/backdrop, heightfield terrain with box walls, instanced houses, alpha-blended water.
+// 3D demo view: sky/backdrop, heightfield terrain with box walls, instanced houses, alpha-blended water, lava steam.
 import { mat4 } from 'wgpu-matrix';
 import type { VillageMarker } from '../core/types';
 import { DEFAULT_RENDER_STYLE, mergeRenderStyle, type RenderStyle } from './shading-common-wgsl';
 import { OrbitCamera } from './orbit-camera';
 import { buildHeightfieldIndices, buildHouseMesh, HOUSE_VERTEX_FLOATS } from './heightfield-mesh-geometry';
-import { createPerspective3DPipelines, DEPTH_FORMAT, MSAA_SAMPLES, type Perspective3DPipelines } from './perspective-3d-pipelines';
+import { createPerspective3DPipelines, createPerspectiveLavaPipelines, DEPTH_FORMAT, MSAA_SAMPLES } from './perspective-3d-pipelines';
+import type { Perspective3DPipelines, PerspectiveLavaPipelines } from './perspective-3d-pipelines';
 import { HOUSES_PER_VILLAGE } from './village-marker-shaders';
+import { LavaSourceBinding, type LavaSource } from './lava-source-binding';
+import { steamPlumeInstanceCount } from './lava-perspective-shaders';
 import {
   FRAME_UNIFORM_BYTES,
   FRAME_UNIFORM_FLOATS,
@@ -27,8 +30,11 @@ export class Perspective3DRenderer {
   private readonly sim: RendererSimSource;
   private readonly uniformBuffer: GPUBuffer;
   private readonly uniformData = new Float32Array(FRAME_UNIFORM_FLOATS);
-  private readonly bindGroup: GPUBindGroup;
+  private readonly layout: GPUBindGroupLayout;
+  private readonly lava: LavaSourceBinding;
+  private bindGroup: GPUBindGroup;
   private readonly pipelines: Perspective3DPipelines;
+  private lavaPipelines: PerspectiveLavaPipelines | null = null;
   private readonly terrainIndices: { buffer: GPUBuffer; count: number };
   private readonly waterIndices: { buffer: GPUBuffer; count: number };
   private readonly houseVertices: { buffer: GPUBuffer; count: number };
@@ -51,9 +57,10 @@ export class Perspective3DRenderer {
       size: FRAME_UNIFORM_BYTES,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-    const layout = createFrameBindGroupLayout(this.device, 'perspective bind layout');
-    this.bindGroup = createFrameBindGroup(this.device, layout, this.uniformBuffer, sim.buffers, 'perspective bind group');
-    this.pipelines = createPerspective3DPipelines(this.device, this.format, layout);
+    this.layout = createFrameBindGroupLayout(this.device, 'perspective bind layout');
+    this.lava = new LavaSourceBinding(this.device, sim, this.uniformBuffer, 'perspective');
+    this.bindGroup = this.createBindGroup();
+    this.pipelines = createPerspective3DPipelines(this.device, this.format, this.layout);
     const cells = sim.grid.width * sim.grid.height;
     this.terrainIndices = this.upload('terrain indices', buildHeightfieldIndices(sim.grid, 0).indices, GPUBufferUsage.INDEX);
     this.waterIndices = this.upload('water indices', buildHeightfieldIndices(sim.grid, 2 * cells).indices, GPUBufferUsage.INDEX);
@@ -74,6 +81,14 @@ export class Perspective3DRenderer {
     this.sources = sanitizeSources(markers);
   }
 
+  /** Lava depth + rock thickness per cell (terrain already includes both); null binds zero buffers = no lava. */
+  setLavaSource(src: LavaSource | null): void {
+    if (this.destroyed) return;
+    this.lava.set(src);
+    if (src) this.lavaPipelines ??= createPerspectiveLavaPipelines(this.device, this.format, this.layout);
+    this.bindGroup = this.createBindGroup();
+  }
+
   setCamera(viewProjection: Float32Array, eye: [number, number, number]): void {
     if (viewProjection.length < 16) throw new Error('setCamera expects a 4x4 column-major matrix');
     const viewProj = new Float32Array(viewProjection.subarray(0, 16));
@@ -91,6 +106,7 @@ export class Perspective3DRenderer {
     const extras = { sources: this.sources, rotated: false };
     packFrameUniforms(this.uniformData, this.sim.grid, this.style, this.villages, this.frameView(w, h), extras);
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformData);
+    this.lava.encodeEffects(encoder);
 
     const pass = encoder.beginRenderPass({
       label: 'perspective 3d pass',
@@ -99,10 +115,11 @@ export class Perspective3DRenderer {
       ],
       depthStencilAttachment: { view: depth.createView(), depthLoadOp: 'clear', depthClearValue: 1, depthStoreOp: 'discard' },
     });
+    const lava = this.lava.active ? this.lavaPipelines : null;
     pass.setBindGroup(0, this.bindGroup);
     pass.setPipeline(this.pipelines.sky);
     pass.draw(3);
-    pass.setPipeline(this.pipelines.terrain);
+    pass.setPipeline(lava?.terrain ?? this.pipelines.terrain);
     pass.setIndexBuffer(this.terrainIndices.buffer, 'uint32');
     pass.drawIndexed(this.terrainIndices.count);
     if (this.villages.length > 0) {
@@ -110,9 +127,13 @@ export class Perspective3DRenderer {
       pass.setVertexBuffer(0, this.houseVertices.buffer);
       pass.draw(this.houseVertices.count, this.villages.length * HOUSES_PER_VILLAGE);
     }
-    pass.setPipeline(this.pipelines.water);
+    pass.setPipeline(lava?.water ?? this.pipelines.water);
     pass.setIndexBuffer(this.waterIndices.buffer, 'uint32');
     pass.drawIndexed(this.waterIndices.count);
+    if (lava) {
+      pass.setPipeline(lava.steam);
+      pass.draw(6, steamPlumeInstanceCount(this.sim.grid.width, this.sim.grid.height));
+    }
     pass.end();
   }
 
@@ -123,9 +144,14 @@ export class Perspective3DRenderer {
     this.terrainIndices.buffer.destroy();
     this.waterIndices.buffer.destroy();
     this.houseVertices.buffer.destroy();
+    this.lava.destroy();
     this.attachments?.depth.destroy();
     this.attachments?.color.destroy();
     this.attachments = null;
+  }
+
+  private createBindGroup(): GPUBindGroup {
+    return createFrameBindGroup(this.device, this.layout, this.uniformBuffer, this.sim.buffers, this.lava.buffers, 'perspective bind group');
   }
 
   private frameView(width: number, height: number): FrameView {
@@ -139,7 +165,7 @@ export class Perspective3DRenderer {
       viewportWidth: width,
       viewportHeight: height,
       fogStart: Math.hypot(cam.eye[0], cam.eye[1], cam.eye[2]) * 0.5,
-      fogDensity: (0.25 / span) * (1 + 1.4 * this.style.stormLevel),
+      fogDensity: (0.25 / span) * (1 + 1.4 * this.style.stormLevel + 0.8 * this.style.ashLevel),
       baseY: (minHeight - 0.12 * Math.max(maxHeight - minHeight, 1)) * verticalScale,
     };
   }

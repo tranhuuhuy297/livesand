@@ -1,48 +1,13 @@
-// Hand-tuned "save the village" levels. Positions come from the terrain layouts so the carved rivers always
-// run into the villages: if the player does nothing, they flood.
+// Hand-tuned "save the village" levels. Positions come from the terrain layouts so the carved rivers (and Mount
+// Ember's lava gully) always run into the villages: if the player does nothing, they flood or burn.
 import type { EdgeFlags } from '../core/types';
+import { HOI_AN_FLOODS_LEVEL } from './hoi-an-floods-level';
+import { edges, type LevelDefinition, type WaterSourceSpec } from './level-types';
+import { MOUNT_EMBER_LEVEL } from './mount-ember-level';
 import { MOUNTAIN_BASIN_FEATURES as MB, RIVER_VALLEY_FEATURES as RV, TWIN_VALLEYS_FEATURES as TV } from './terrain-layouts';
 import type { TerrainRecipe } from './terrain-generators';
 
-/** u,v normalised 0..1 (north = v 0); radius as a fraction of grid width. */
-export interface VillageSpec {
-  u: number;
-  v: number;
-  radius: number;
-  name: string;
-}
-
-/** u,v normalised 0..1; radius as a fraction of grid width; rate in world units/s per covered cell. */
-export interface WaterSourceSpec {
-  u: number;
-  v: number;
-  radius: number;
-  rate: number;
-}
-
-/** Global rain (units/s) at time t (s); linearly interpolated between keyframes, held beyond the ends. */
-export interface StormKeyframe {
-  t: number;
-  rain: number;
-}
-
-export interface LevelDefinition {
-  id: string;
-  name: string;
-  tagline: string;
-  recipe: TerrainRecipe;
-  villages: VillageSpec[];
-  sources: WaterSourceSpec[];
-  openEdges: EdgeFlags;
-  durationSec: number;
-  storm: StormKeyframe[];
-  floodDepthThreshold: number;
-  floodSecondsToLose: number;
-  /** Seconds of spring flow simulated at load, so rivers already run under the briefing card. */
-  prefillSec?: number;
-}
-
-const edges = (open: Partial<EdgeFlags>): EdgeFlags => ({ north: false, east: false, south: false, west: false, ...open });
+export type { EruptionKeyframe, EruptionSpec, LevelDefinition, LevelHint, PlaceRef, StormKeyframe, VillageSpec, WaterSourceSpec } from './level-types';
 
 export const LEVELS: LevelDefinition[] = [
   {
@@ -107,6 +72,8 @@ export const LEVELS: LevelDefinition[] = [
     floodSecondsToLose: 15,
     prefillSec: 10,
   },
+  MOUNT_EMBER_LEVEL,
+  HOI_AN_FLOODS_LEVEL,
 ];
 
 const freePlay = (recipe: TerrainRecipe, sources: WaterSourceSpec[], openEdges: EdgeFlags, id = 'sandbox'): LevelDefinition => ({
@@ -162,7 +129,17 @@ export function peakStormRain(level: LevelDefinition): number {
   return level.storm.reduce((max, k) => Math.max(max, k.rain), 0);
 }
 
+/** Highest crater emission of a level (0 without an eruption), used to scale the eruption meter. */
+export function peakEruptionRate(level: LevelDefinition): number {
+  return (level.eruption?.keyframes ?? []).reduce((max, k) => Math.max(max, k.rate), 0);
+}
+
 /** Whether a level is free play (no villages, no clock). */
 export function isFreePlay(level: LevelDefinition): boolean {
   return level.villages.length === 0;
+}
+
+/** The lava tool belongs to free play and to levels with a volcano. */
+export function allowsLavaTool(level: LevelDefinition): boolean {
+  return isFreePlay(level) || level.eruption !== undefined;
 }

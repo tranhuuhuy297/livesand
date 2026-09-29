@@ -56,7 +56,7 @@
 
 /* Left column: village chips with the level briefing tucked underneath, clear of the far side of the box. */
 .ls-side { position: absolute; top: 68px; left: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; pointer-events: none !important; }
-.ls-side > .ls-intro { pointer-events: auto; }
+.ls-side > .ls-intro, .ls-side > .ls-place-card { pointer-events: auto; }
 
 /* Villages */
 .ls-villages { display: grid; gap: 8px; width: 196px; pointer-events: none !important; }
@@ -95,7 +95,7 @@
 .ls-range:focus-visible { outline: 2px solid var(--ls-water); outline-offset: 4px; border-radius: 6px; }
 
 /* Level briefing: a compact card in the left column, so neither the springs nor the villages hide behind it. */
-.ls-intro { display: grid; gap: 14px; width: 320px; padding: 16px 18px; background: var(--ls-panel-strong); animation: ls-pop 0.25s ease-out; }
+.ls-intro, .ls-place-card { display: grid; gap: 14px; width: 320px; padding: 16px 18px; background: var(--ls-panel-strong); animation: ls-pop 0.25s ease-out; }
 .ls-intro-text { min-width: 0; }
 .ls-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ls-sand); }
 .ls-card-title { margin: 2px 0 4px; font-size: 21px; line-height: 1.15; letter-spacing: -0.01em; }
@@ -113,7 +113,7 @@
 @media (max-width: 980px) {
   .ls-side { display: contents; }
   .ls-villages { position: absolute; top: 68px; left: 12px; width: 168px; }
-  .ls-intro { position: absolute; bottom: 88px; left: 50%; translate: -50% 0; width: min(560px, calc(100vw - 24px)); }
+  .ls-intro, .ls-place-card { position: absolute; bottom: 88px; left: 50%; translate: -50% 0; width: min(560px, calc(100vw - 24px)); }
   .ls-wordmark, .ls-topbar > .ls-btn-accent .ls-btn-label, .ls-segmented .ls-btn-label, .ls-free-actions .ls-btn-label { display: none; }
   .ls-tool { width: 54px; height: 52px; padding: 7px 2px 5px; font-size: 10px; }
   .ls-tool .ls-icon { width: 22px; height: 22px; }
@@ -123,7 +123,7 @@
   .ls-tool-key { display: none; }
 }
 @media (max-width: 640px) {
-  .ls-intro { bottom: 136px; }
+  .ls-intro, .ls-place-card { bottom: 136px; }
   .ls-hud.has-intro .ls-villages { display: none; }
   .ls-topbar { gap: 6px; }
   .ls-level-name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }

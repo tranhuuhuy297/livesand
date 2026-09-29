@@ -16,6 +16,7 @@ struct TerrainVsOut {
   @location(0) gridPos: vec2<f32>,
   @location(1) world: vec3<f32>,
   @location(2) @interpolate(flat) skirt: f32,
+  @location(3) lavaFx: vec4<f32>, // lava glow on nearby ground, steam where lava meets water, smoothed lava slope
 };
 
 // Vertex ids [0, cells) are the surface, [cells, 2*cells) the same cells dropped to the box floor.
@@ -31,6 +32,11 @@ fn vsTerrain(@builtin(vertex_index) vid: u32) -> TerrainVsOut {
   result.gridPos = gp;
   result.world = world;
   result.skirt = select(0.0, 1.0, isBottom);
+  // Per vertex (one per cell) is plenty for these smooth fields and far cheaper than per pixel.
+  result.lavaFx = vec4<f32>(0.0);
+  if (!isBottom && lavaEnabled()) {
+    result.lavaFx = lavaFxAt(vec2<i32>(gp));
+  }
   return result;
 }
 
@@ -42,6 +48,7 @@ fn fsTerrain(input: TerrainVsOut) -> @location(0) vec4<f32> {
   let fwH = fwidth(ts.x);
   let faceN = normalize(cross(dpdx(input.world), dpdy(input.world)));
   let t = frame.misc.y;
+  let lavaOn = lavaEnabled();
   var col: vec3<f32>;
   if (input.skirt > 0.5) {
     let wallN = faceTowardEye(faceN, input.world);
@@ -49,21 +56,52 @@ fn fsTerrain(input: TerrainVsOut) -> @location(0) vec4<f32> {
     // A little camera-side fill keeps the shaded box walls from going muddy.
     let fill = max(dot(wallN, normalize(frame.eye.xyz - input.world)), 0.0) * 0.28;
     col = lightSurface(strata, wallN) + strata * fill;
+    if (lavaOn) {
+      col = lavaWallSection(col, input.gridPos, ts.x, input.world.y / frame.heightStyle.w, wallN, t);
+    }
   } else {
     let vs = frame.heightStyle.w;
-    let n = normalize(vec3<f32>(-ts.y * vs, 1.0, -ts.z * vs));
+    var lava = 0.0;
+    var rock = 0.0;
+    if (lavaOn) {
+      lava = lavaSmooth(input.gridPos).x;
+      rock = rockBilinear(input.gridPos);
+    }
+    let lavaCover = lavaCoverage(lava);
+    let rockCover = basaltCoverage(rock) * (1.0 - lavaCover);
     var albedo = elevationColor(heightToUnit(ts.x));
-    albedo = applyContours(albedo, contourLines(ts.x, frame.heightStyle.z, fwH) * seaContourFade(ts.x));
-    let rain = rainAmount(input.gridPos);
+    var grad = ts.yz;
+    if (rockCover > 0.0) {
+      let basalt = basaltSurface(input.gridPos, px);
+      albedo = mix(albedo, basalt.albedo, rockCover);
+      grad += basalt.bump * rockCover / vs; // bumps are true heights, so undo the vertical exaggeration
+    }
+    let n = normalize(vec3<f32>(-grad.x * vs, 1.0, -grad.y * vs));
+    albedo = applyContours(albedo, contourLines(ts.x, frame.heightStyle.z, fwH) * seaContourFade(ts.x) * (1.0 - lavaCover));
+    let rain = rainAmount(input.gridPos) * (1.0 - lavaCover);
     albedo *= 1.0 - 0.14 * rain;
     albedo = mix(albedo, albedo * 0.55, rainRings(input.gridPos, rain, t, px) * 0.6);
     var sunVisible = 1.0;
     if (frame.misc.x > 0.5) {
       sunVisible = terrainSunVisibility(input.gridPos, ts.x);
     }
+    var lit = lightSurfaceShadowed(albedo, n, sunVisible);
+    lit = applyLavaGlow(lit, albedo, input.lavaFx.x * (1.0 - lavaCover), 1.3);
+    if (lavaCover > 0.0) {
+      // Crust is lit like ground; the incandescent part is pure emission (no sun, no shadow).
+      let molten = shadeLava(input.gridPos, lava, input.lavaFx.zw, t, px);
+      let smoothN = normalize(vec3<f32>(-ts.y * vs, 1.0, -ts.z * vs));
+      // Fresh crust is glassy: a soft sun sheen on the dark plates (crust albedo is zero where the lava is molten).
+      let halfDir = normalize(sunDir() + normalize(frame.eye.xyz - input.world));
+      let sheen = pow(max(dot(smoothN, halfDir), 0.0), 36.0) * 1.3 * sunVisible * (1.0 - 0.7 * frame.effects.y);
+      let crustLit = lightSurfaceShadowed(molten.crust, smoothN, sunVisible) + vec3<f32>(0.85, 0.85, 0.9) * sheen * molten.crust.g;
+      lit = mix(lit, crustLit + molten.emit, lavaCover);
+    }
+    let steam = steamWisps(input.gridPos, input.lavaFx.y, input.lavaFx.x, t);
+    // Ground-hugging vapour only off the lava; over it the rising plumes carry the steam.
+    lit = mix(lit, steam.rgb, steam.a * 0.5 * (1.0 - lavaCover));
     // Markers after lighting so they read as glowing rings on shaded slopes.
-    let lit = shadeSourceMarkers(input.gridPos, px, t, lightSurfaceShadowed(albedo, n, sunVisible));
-    col = shadeVillageRings(input.gridPos, px, t, lit);
+    col = shadeVillageRings(input.gridPos, px, t, shadeSourceMarkers(input.gridPos, px, t, lit));
   }
   return vec4<f32>(applyFog(col, input.world), 1.0);
 }

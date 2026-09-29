@@ -37,14 +37,17 @@
 - Validate at boundaries and throw descriptive errors (`RangeError` / `TypeError` with the offending value): calibration,
   sim parameters, depth frames, CLI flags.
 - Never show a blank page: WebGPU absence and fatal errors render a friendly screen and set `window.__livesand.error`.
-- Network input is untrusted: size-check before allocating, drop malformed frames, cap connections.
+- Network input is untrusted: size-check before allocating, drop malformed frames, cap connections. Elevation tiles
+  and geocoder answers are validated too (tile size, finite coordinates, sanitised names), every download has a
+  timeout, and a newer request aborts the older one.
 - Anything the user can fix gets a message saying how (relay CLI listen errors, pairing fetch failures).
 
 ## Testing
 
 - **Unit tests** (`tests/unit/*.test.ts`, Vitest in Node) cover everything that does not need a GPU: protocol, depth
-  processing, homography, calibration storage, relay, sculpting, terrain, level balance (a CPU reference simulation),
-  camera math. Keep GPU-free logic in GPU-free modules so it stays testable.
+  processing, homography, calibration storage, relay, sculpting, terrain, real-place terrain mapping, level balance
+  (CPU reference simulations of the water and the lava), camera math. Keep GPU-free logic in GPU-free modules so it
+  stays testable.
 - **E2E tests** (`tests/e2e/*.spec.ts`, Playwright) run the real app in headless Chromium with WebGPU on SwiftShader and
   drive it through `window.__livesand.debug` (`stepFrames` makes time deterministic).
 - Test names describe the scenario (`one quick swipe from the village to the sea saves the first level`).
@@ -62,5 +65,6 @@
 - Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
 - Before pushing: `npm run typecheck && npm test && npm run build`, and `npm run test:e2e` for anything that touches
   rendering, input or the relay.
-- Visual changes: attach a screenshot or GIF. If the README media is affected, re-run `npm run demo:media`.
+- Visual changes: attach a screenshot or GIF. If the README media is affected, re-run `npm run demo:media` (review
+  with `--out` first; README GIFs stay under 4 MB).
 - Never commit secrets, `.env` files or signing identities.

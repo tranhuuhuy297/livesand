@@ -17,6 +17,8 @@ export interface RenderStyle {
   seaLevel: number;
   /** 0..1 storm strength: darker sky, heavier fog, rain rings everywhere. */
   stormLevel: number;
+  /** 0..1 volcanic ash (3D view): a warm, dim sky so the lava glow stands out. */
+  ashLevel: number;
 }
 
 export const SEA_LEVEL_OFF = -1e6;
@@ -30,9 +32,10 @@ export const DEFAULT_RENDER_STYLE: RenderStyle = Object.freeze({
   timeSec: 0,
   seaLevel: SEA_LEVEL_OFF,
   stormLevel: 0,
+  ashLevel: 0,
 });
 
-/** Frame bindings, sim samplers, colormap/contours/hillshade, water shading and village markers in one module. */
+/** Frame bindings, sim samplers, colormap/contours/hillshade, water shading and village markers in one module (lava is added per variant). */
 export const SHADING_COMMON_WGSL = [
   FRAME_BINDINGS_WGSL,
   SIM_SAMPLING_WGSL,
@@ -44,7 +47,7 @@ export const SHADING_COMMON_WGSL = [
 /** Merges a style patch, ignoring non-finite numbers so one bad slider value cannot blank the view. */
 export function mergeRenderStyle(base: RenderStyle, patch: Partial<RenderStyle>): RenderStyle {
   const next: RenderStyle = { ...base };
-  const numeric = ['minHeight', 'maxHeight', 'contourInterval', 'verticalScale', 'timeSec', 'seaLevel', 'stormLevel'] as const;
+  const numeric = ['minHeight', 'maxHeight', 'contourInterval', 'verticalScale', 'timeSec', 'seaLevel', 'stormLevel', 'ashLevel'] as const;
   for (const key of numeric) {
     const value = patch[key];
     if (typeof value === 'number' && Number.isFinite(value)) next[key] = value;

@@ -2,7 +2,7 @@
 // free play extras, the storm overlay and the quarter-turned portrait map.
 import { mkdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { APP_TEST_OPTIONS, SCREENS_DIR, appState, heightsDelta, openApp, stepFrames } from './app-e2e-test-helpers';
+import { APP_TEST_OPTIONS, SCREENS_DIR, appState, heightsDelta, openApp, revealResult, stepFrames } from './app-e2e-test-helpers';
 import { touchPointer, waterSum, watchConsole } from './app-e2e-test-helpers';
 import { scaled } from './e2e-timing';
 
@@ -81,6 +81,7 @@ test('holding Space to orbit when a level is lost does not click the focused Ret
     state = await appState(page);
   }
   expect(state.phase).toBe('lost');
+  await revealResult(page);
   await expect(page.locator('.ls-result')).toBeVisible();
   expect(await page.evaluate(() => document.activeElement?.textContent?.trim())).toContain('Retry');
   await page.keyboard.down(' '); // auto-repeat lands on the freshly focused button

@@ -1,6 +1,7 @@
 // CPU side of the shared Frame uniform block + bind group helpers used by both renderers.
 import type { GridSize, SimGpuBuffers, VillageMarker, VillageState } from '../core/types';
 import type { RenderStyle } from './shading-common-wgsl';
+import type { LavaBindings } from './lava-source-binding';
 
 /** Structural GpuContext subset renderers need (keeps render/ independent of gpu/ module wiring). */
 export interface RendererGpu {
@@ -34,7 +35,7 @@ export interface SourceMarker {
 
 export const MAX_VILLAGES = 16;
 export const MAX_SOURCES = 8;
-export const FRAME_UNIFORM_FLOATS = 216;
+export const FRAME_UNIFORM_FLOATS = 220;
 export const FRAME_UNIFORM_BYTES = FRAME_UNIFORM_FLOATS * 4;
 /** Shader time wraps so f32 time (and everything animated by it) keeps full precision on all-day exhibits. */
 export const SHADER_TIME_WRAP_SEC = 1200;
@@ -51,8 +52,10 @@ const EFFECTS = 52;
 const VILLAGES = 56;
 const VILLAGE_INFO = VILLAGES + MAX_VILLAGES * 4;
 const SOURCES = VILLAGE_INFO + MAX_VILLAGES * 4;
+const ATMOSPHERE = SOURCES + MAX_SOURCES * 4;
 
-const STATE_CODE: Record<VillageState, number> = { safe: 0, flooding: 1, lost: 2 };
+// Burning sits inside flooding's (0.5, 1.5) band so it shares the pulse and progress arc; only its colour differs.
+const STATE_CODE: Record<VillageState, number> = { safe: 0, flooding: 1, burning: 1.25, lost: 2 };
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
 /** Copies at most MAX_VILLAGES markers, dropping non-finite ones that would poison the shader loop. */
@@ -96,6 +99,7 @@ export function packFrameUniforms(
   const sources = Math.min(extras.sources.length, MAX_SOURCES);
   const storm = Math.min(1, Math.max(0, style.stormLevel));
   out.set([style.seaLevel, storm, sources, extras.rotated ? 1 : 0], EFFECTS);
+  out[ATMOSPHERE] = Number.isFinite(style.ashLevel) ? Math.min(1, Math.max(0, style.ashLevel)) : 0;
   for (let i = 0; i < sources; i++) {
     const s = extras.sources[i];
     out.set([s.x, s.y, s.radius, 0], SOURCES + i * 4);
@@ -119,6 +123,11 @@ export function createFrameBindGroupLayout(device: GPUDevice, label: string): GP
       storage(2),
       storage(3),
       storage(4),
+      storage(5),
+      storage(6),
+      storage(7),
+      // Fragment only: the vertex stage stays within the 8 storage buffers every WebGPU device guarantees.
+      { binding: 8, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
     ],
   });
 }
@@ -128,6 +137,7 @@ export function createFrameBindGroup(
   layout: GPUBindGroupLayout,
   uniform: GPUBuffer,
   buffers: SimGpuBuffers,
+  lava: LavaBindings,
   label: string,
 ): GPUBindGroup {
   return device.createBindGroup({
@@ -139,6 +149,10 @@ export function createFrameBindGroup(
       { binding: 2, resource: { buffer: buffers.water } },
       { binding: 3, resource: { buffer: buffers.flux } },
       { binding: 4, resource: { buffer: buffers.emission } },
+      { binding: 5, resource: { buffer: lava.lava } },
+      { binding: 6, resource: { buffer: lava.rock } },
+      { binding: 7, resource: { buffer: lava.fx } },
+      { binding: 8, resource: { buffer: lava.emission } },
     ],
   });
 }

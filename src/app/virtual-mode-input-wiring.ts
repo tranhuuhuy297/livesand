@@ -17,7 +17,7 @@ export function wireVirtualModeInput(app: VirtualModeApp): VirtualModeInput {
     tool: () => app.tool,
     brushRadius: () => app.brushRadius,
     changeBrushRadius: (d) => app.actions.setBrushRadius(app.brushRadius + d),
-    sculptBounds: () => ({ min: 0, max: app.relief, floor: app.session.sculptFloor }),
+    sculptBounds: () => ({ min: 0, max: app.levels.sculptMax, floor: app.session.sculptFloor }),
     onStrokeStart: () => app.actions.onStrokeStart(),
   });
   // Dialogs that pause the game also keep Enter/R from starting or restarting it out of sight.

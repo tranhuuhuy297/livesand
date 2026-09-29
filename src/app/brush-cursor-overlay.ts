@@ -1,7 +1,7 @@
 // SVG brush ring draped over the terrain under the cursor, projected with the same mapping as the active view.
-import type { SculptTool } from '../input/sculpt-tools';
 import { sampleHeightBilinear } from '../input/heightfield-ray-picker';
 import type { Vec2 } from '../core/types';
+import type { AppTool } from './sculpt-tool-settings';
 import { gridToScreen, screenToGrid, type ViewGeometry } from './view-screen-mapping';
 
 const RING_SEGMENTS = 48;
@@ -29,7 +29,7 @@ export class BrushCursorOverlay {
   }
 
   /** Redraws the ring for the cursor at `client` (null hides it); `active` brightens it while the tool is held. */
-  update(geometry: ViewGeometry, client: Vec2 | null, tool: SculptTool, radius: number, active: boolean): void {
+  update(geometry: ViewGeometry, client: Vec2 | null, tool: AppTool, radius: number, active: boolean): void {
     const center = client ? screenToGrid(geometry, client.x, client.y) : null;
     if (!center) {
       this.hide();

@@ -21,6 +21,9 @@ fn villageStateColor(state: f32) -> vec3<f32> {
   if (state < 0.5) {
     return vec3<f32>(0.25, 0.96, 0.45);
   }
+  if (state > 1.1 && state < 1.5) {
+    return vec3<f32>(1.0, 0.3, 0.12);
+  }
   if (state < 1.5) {
     return vec3<f32>(1.0, 0.58, 0.08);
   }

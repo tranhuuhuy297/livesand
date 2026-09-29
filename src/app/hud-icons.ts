@@ -42,6 +42,12 @@ export const ICONS = {
     `c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/></svg>`,
   shuffle: svg('<path d="M3 17l5-7 4 5 3-3 6 5"/><path d="M16 3h5v5M21 3l-6 6"/>'),
   link: svg('<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>'),
+  volcano: svg('<path d="M3 20l6.5-10h5L21 20z"/><path d="M12 7.5V3.5M9.3 7.8L7.6 5M14.7 7.8L16.4 5"/><path d="M11 10l-1.2 4.2 1.8 1.8"/>'),
+  pin: svg('<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>'),
+  globe: svg('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.4 3.6 5.2 3.6 8.5s-1.1 6.1-3.6 8.5c-2.5-2.4-3.6-5.2-3.6-8.5s1.1-6.1 3.6-8.5z"/>'),
+  locate: svg('<circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>'),
+  share: svg('<path d="M12 3.5v11"/><path d="M8 7.5l4-4 4 4"/><path d="M6 11.5H5v8.5h14v-8.5h-1"/>'),
+  search: svg('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>'),
   starOutline: svg('<path d="M12 3.2l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17.2l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>'),
 } as const;
 

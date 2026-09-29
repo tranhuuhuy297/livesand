@@ -1,6 +1,6 @@
-// Game status widgets: countdown pill, storm meter and one status chip per village.
+// Game status widgets: countdown pill, storm and eruption meters, and one status chip per village.
 import type { VillageState } from '../core/types';
-import { peakStormRain } from '../game/level-definitions';
+import { peakEruptionRate, peakStormRain } from '../game/level-definitions';
 import { formatClock, h, setHidden, setText, toggleClass } from './hud-dom-helpers';
 import { ICONS } from './hud-icons';
 import type { HudSnapshot } from './hud-snapshot';
@@ -24,6 +24,8 @@ export class GameStatusBar {
   private readonly timerMeter = meter();
   private readonly storm: HTMLDivElement;
   private readonly stormMeter = meter();
+  private readonly eruption: HTMLDivElement;
+  private readonly eruptionMeter = meter();
 
   constructor() {
     this.timer = h('div', { class: 'ls-pill ls-timer ls-glass', title: 'Time left to keep the villages dry' }, [
@@ -36,7 +38,12 @@ export class GameStatusBar {
       h('span', { class: 'ls-pill-label', text: 'Storm' }),
       this.stormMeter.root,
     ]);
-    this.root = h('div', { class: 'ls-status' }, [this.timer, this.storm]);
+    this.eruption = h('div', { class: 'ls-pill ls-eruption ls-glass', title: 'Eruption strength' }, [
+      icon(ICONS.volcano),
+      h('span', { class: 'ls-pill-label', text: 'Eruption' }),
+      this.eruptionMeter.root,
+    ]);
+    this.root = h('div', { class: 'ls-status' }, [this.timer, this.storm, this.eruption]);
   }
 
   update(s: HudSnapshot): void {
@@ -57,10 +64,18 @@ export class GameStatusBar {
       setFill(this.stormMeter.fill, s.rainRate / peak);
       toggleClass(this.storm, 'is-raining', s.rainRate > peak * 0.05);
     }
+    const lavaPeak = peakEruptionRate(s.level);
+    setHidden(this.eruption, lavaPeak <= 0);
+    if (lavaPeak > 0) {
+      const erupting = s.phase === 'running' ? s.eruptionRate : 0;
+      setFill(this.eruptionMeter.fill, erupting / lavaPeak);
+      toggleClass(this.eruption, 'is-erupting', erupting > lavaPeak * 0.5);
+    }
   }
 }
 
-const STATE_TEXT: Record<VillageState, string> = { safe: 'Dry', flooding: 'Flooding', lost: 'Lost' };
+const STATE_TEXT: Record<VillageState, string> = { safe: 'Dry', flooding: 'Flooding', burning: 'Burning', lost: 'Lost' };
+const STATES: readonly VillageState[] = ['safe', 'flooding', 'burning', 'lost'];
 
 interface Chip {
   root: HTMLElement;
@@ -71,15 +86,16 @@ interface Chip {
 export class VillageChips {
   readonly root: HTMLElement;
   private chips: Chip[] = [];
-  private levelId = '';
+  // Compared by object: every live place's storm shares one id but names its own town.
+  private level: HudSnapshot['level'] | null = null;
 
   constructor() {
     this.root = h('aside', { class: 'ls-villages', attrs: { 'aria-label': 'Villages' } });
   }
 
   update(s: HudSnapshot): void {
-    if (this.levelId !== s.level.id || this.chips.length !== s.villages.length) {
-      this.levelId = s.level.id;
+    if (this.level !== s.level || this.chips.length !== s.villages.length) {
+      this.level = s.level;
       this.chips = s.villages.map((v) => {
         const status = h('span', { class: 'ls-village-status' });
         const bar = meter();
@@ -96,8 +112,14 @@ export class VillageChips {
     s.villages.forEach((v, i) => {
       const chip = this.chips[i];
       const flood = s.markers[i]?.flood01 ?? 0;
-      for (const state of ['safe', 'flooding', 'lost'] as const) toggleClass(chip.root, `is-${state}`, v.state === state);
-      const text = v.state === 'flooding' ? `${STATE_TEXT.flooding} ${Math.round(flood * 100)}%` : STATE_TEXT[v.state];
+      for (const state of STATES) toggleClass(chip.root, `is-${state}`, v.state === state);
+      const damaged = v.state === 'flooding' || v.state === 'burning';
+      const lavaNear = v.state === 'safe' && Boolean(s.lavaNear[i]);
+      toggleClass(chip.root, 'is-lava-near', lavaNear);
+      let text = damaged ? `${STATE_TEXT[v.state]} ${Math.round(flood * 100)}%` : STATE_TEXT[v.state];
+      if (v.state === 'lost' && v.lostTo === 'lava') text = 'Burned';
+      else if (lavaNear) text = 'Lava close';
+      else if (v.state === 'safe' && s.level.eruption) text = 'Safe';
       setText(chip.status, text);
       setFill(chip.fill, flood);
     });

@@ -2,8 +2,11 @@
 import type { SculptTool } from '../input/sculpt-tools';
 import { ICONS } from './hud-icons';
 
+/** Every dock tool: the terrain and rain brushes plus lava (free play and volcano levels only). */
+export type AppTool = SculptTool | 'lava';
+
 export interface ToolInfo {
-  id: SculptTool;
+  id: AppTool;
   label: string;
   key: string;
   icon: string;
@@ -16,6 +19,7 @@ export const TOOLS: readonly ToolInfo[] = [
   { id: 'smooth', label: 'Smooth', key: '3', icon: ICONS.smooth, hint: 'Soften bumps and ridges' },
   { id: 'flatten', label: 'Flatten', key: '4', icon: ICONS.flatten, hint: 'Level ground to the height where you start' },
   { id: 'rain', label: 'Rain', key: '5', icon: ICONS.rain, hint: 'Make it rain under the cursor' },
+  { id: 'lava', label: 'Lava', key: '6', icon: ICONS.volcano, hint: 'Pour lava under the cursor' },
 ];
 
 export const BRUSH_RADIUS_MIN = 3;
@@ -37,6 +41,6 @@ export function clampBrushRadius(radius: number): number {
   return Math.min(BRUSH_RADIUS_MAX, Math.max(BRUSH_RADIUS_MIN, Math.round(radius)));
 }
 
-export function toolForKey(key: string): SculptTool | null {
+export function toolForKey(key: string): AppTool | null {
   return TOOLS.find((t) => t.key === key)?.id ?? null;
 }

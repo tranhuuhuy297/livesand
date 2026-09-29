@@ -1,10 +1,9 @@
 // Global keyboard shortcuts for virtual mode; browser shortcuts (Ctrl/Cmd+key) and text fields are left alone.
-import type { SculptTool } from '../input/sculpt-tools';
 import { isTypingTarget } from './hud-dom-helpers';
-import { toolForKey } from './sculpt-tool-settings';
+import { toolForKey, type AppTool } from './sculpt-tool-settings';
 
 export interface ShortcutActions {
-  setTool(tool: SculptTool): void;
+  setTool(tool: AppTool): void;
   toggleView(): void;
   resetLevel(): void;
   startLevel(): void;

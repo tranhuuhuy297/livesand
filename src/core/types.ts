@@ -27,7 +27,8 @@ export interface EdgeFlags {
   west: boolean;
 }
 
-export type VillageState = 'safe' | 'flooding' | 'lost';
+/** 'burning': molten lava over the village (it burns down within seconds). */
+export type VillageState = 'safe' | 'flooding' | 'burning' | 'lost';
 
 /** What renderers need to draw a village on the terrain (grid coordinates). */
 export interface VillageMarker {

@@ -27,7 +27,8 @@ export function createHelpDialog(onRealSandbox: () => void): HudModal {
       class: 'ls-modal-lead',
       text:
         'Water flows downhill. Keep every village dry until the clock runs out: dig channels that carry water to the ' +
-        'open edge (the sea), pile up levees, or raise the ground under a village.',
+        'open edge (the sea), pile up levees, or raise the ground under a village. Lava flows slowly and turns to ' +
+        'rock: steer it with walls and trenches.',
     }),
     h('div', { class: 'ls-help-grid' }, [
       h('section', {}, [
@@ -44,6 +45,7 @@ export function createHelpDialog(onRealSandbox: () => void): HudModal {
       h('section', {}, [
         h('h3', { text: 'Keyboard' }),
         row(kbd('1', '2', '3', '4', '5'), 'Raise, Dig, Smooth, Flatten, Rain'),
+        row(kbd('6'), 'Lava (free play, Mount Ember)'),
         row(kbd('[', ']'), 'Smaller / bigger brush'),
         row(kbd('V'), 'Switch 2D map / 3D view'),
         row(kbd('Enter'), 'Start the level'),

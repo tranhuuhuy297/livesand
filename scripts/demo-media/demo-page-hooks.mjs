@@ -36,15 +36,50 @@ export async function takeOverVirtualApp(page) {
   await page.evaluate(() => window.__demoApp.loop.stop());
 }
 
-/** Runs `n` frames of `dt` seconds, then redraws the brush ring the live loop would have drawn. */
-export async function step(page, n, dt) {
-  await page.evaluate(([count, seconds]) => window.__livesand.debug.stepFrames(count, seconds), [n, dt]);
+/**
+ * Runs `n` frames of `dt` seconds (drawing only the last unless `draw` is false), then redraws the overlays the live
+ * loop would have drawn: brush ring, level hint line and north arrow.
+ */
+export async function step(page, n, dt, draw = true) {
+  await page.evaluate(([count, seconds, drawLast]) => window.__livesand.debug.stepFrames(count, seconds, drawLast), [n, dt, draw]);
+  if (!draw) return;
   await page.evaluate(() => {
     const app = window.__demoApp;
     if (!app) return;
     const { pointer } = app.input;
-    app.cursor.update(app.geometry(), pointer.brushClient, app.tool, app.brushRadius, pointer.stroking);
+    const brush = { client: pointer.brushClient, tool: app.tool, radius: app.brushRadius, active: pointer.stroking };
+    app.screen.drawOverlays(app.geometry(), app.session, brush);
   });
+}
+
+/** Hides the brush ring for a still: close-up 3D cameras fill the window, so no screen edge is off the terrain. */
+export async function parkPointer(page) {
+  const size = page.viewportSize();
+  await page.mouse.move(size.width - 4, size.height / 2);
+  await page.evaluate(() => {
+    const init = { pointerType: 'mouse', pointerId: 1, isPrimary: true };
+    document.querySelector('canvas.ls-canvas')?.dispatchEvent(new PointerEvent('pointerleave', init));
+  });
+}
+
+/** Game state snapshot from the debug API. */
+export function appState(page) {
+  return page.evaluate(() => window.__livesand.debug.state());
+}
+
+/** Fast-forwards (undrawn, `dt` per frame) until the level clock reaches `sec` or the attempt ends. */
+export async function stepUntil(page, sec, dt = 0.5) {
+  let s = await appState(page);
+  while (s.phase === 'running' && s.elapsedSec < sec - 1e-6) {
+    await step(page, Math.max(1, Math.min(8, Math.ceil((sec - s.elapsedSec) / dt))), dt, false);
+    s = await appState(page);
+  }
+  return s;
+}
+
+/** Points the 3D camera: `{ target, distance, yaw, pitch }` (any subset). */
+export async function setCamera(page, camera) {
+  await page.evaluate((cam) => Object.assign(window.__demoApp.camera, cam), camera);
 }
 
 /** Client-space point of grid cell (gx, gy) on the terrain surface in the current view. */
@@ -58,6 +93,13 @@ export async function gridToClient(page, gx, gy) {
     const h = g.heights[Math.round(Math.min(height - 1, Math.max(0, y))) * width + Math.round(Math.min(width - 1, Math.max(0, x)))];
     return gridToScreen(g, viewProj, x, y, h); // raw height: gridToScreen applies the view's vertical scale
   }, [gx, gy]);
+}
+
+/** Moves the mouse onto grid cell `p` ({ x, y }) on the current terrain surface. */
+export async function moveToGrid(page, p) {
+  const client = await gridToClient(page, p.x, p.y);
+  if (!client) throw new Error(`grid cell ${p.x.toFixed(1)},${p.y.toFixed(1)} is not on screen with this camera`);
+  await page.mouse.move(client.x, client.y);
 }
 
 /** A drawn arrow pointer that follows real mouse events (headless screenshots have no OS cursor). */
@@ -80,6 +122,14 @@ export async function installFakeCursor(page) {
     window.addEventListener('pointermove', place, true);
     window.addEventListener('pointerdown', (ev) => { place(ev); el.style.scale = '0.88'; }, true);
     window.addEventListener('pointerup', () => { el.style.scale = '1'; }, true);
+  });
+}
+
+/** Client-space tip of the drawn pointer (where the last mouse event put it). */
+export async function fakeCursorPosition(page) {
+  return page.evaluate(() => {
+    const t = document.getElementById('demo-cursor').style.translate.split(' ').map(parseFloat);
+    return { x: t[0] + 4, y: t[1] + 3 };
   });
 }
 

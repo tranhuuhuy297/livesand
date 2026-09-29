@@ -6,6 +6,7 @@ struct WaterVsOut {
   @location(0) gridPos: vec2<f32>,
   @location(1) world: vec3<f32>,
   @location(2) @interpolate(flat) skirt: f32,
+  @location(3) lavaFx: vec2<f32>, // lava glow nearby, steam where lava meets water
 };
 
 // Vertex ids: [0, cells) surface, [cells, 2*cells) wall bottom (terrain), [2*cells, 3*cells) wall top (surface).
@@ -19,6 +20,9 @@ fn vsWater(@builtin(vertex_index) vid: u32) -> WaterVsOut {
   var h = ground + depth;
   if (kind == 0u && depth < 0.02) {
     h = ground - 0.6; // dry vertices sink under the terrain so shorelines are cut by the depth test
+    if (lavaEnabled()) {
+      h -= lavaAt(vec2<i32>(gp)) * 1.5; // and below a lava front's steep wall, so the cut stays clean
+    }
   }
   if (kind == 1u) {
     h = ground;
@@ -29,6 +33,10 @@ fn vsWater(@builtin(vertex_index) vid: u32) -> WaterVsOut {
   result.gridPos = gp;
   result.world = world;
   result.skirt = select(0.0, 1.0, kind == 1u);
+  result.lavaFx = vec2<f32>(0.0);
+  if (kind == 0u && lavaEnabled()) {
+    result.lavaFx = lavaFxAt(vec2<i32>(gp)).xy;
+  }
   return result;
 }
 
@@ -43,6 +51,10 @@ fn fsWater(input: WaterVsOut) -> @location(0) vec4<f32> {
   let sea = seaAmount(ws.x, ts.x);
   let isSkirt = input.skirt > 0.5;
   if (!isSkirt && depth < 0.004) {
+    discard;
+  }
+  // Lava is never under water: at a steep lava front the mesh cut is cell-coarse, so the lava outline decides instead.
+  if (!isSkirt && lavaEnabled() && lavaCoverage(lavaSmooth(input.gridPos).x) > 0.5) {
     discard;
   }
   let t = frame.misc.y;
@@ -73,13 +85,17 @@ fn fsWater(input: WaterVsOut) -> @location(0) vec4<f32> {
   var col = mix(body, refl, fresnel * 0.65);
   let foam = foamAmount(input.gridPos, flow, depth, t) * smoothstep(0.0, 0.06, depth) * (1.0 - input.skirt);
   col = mix(col, vec3<f32>(0.95, 0.98, 1.0), foam * 0.8);
+  // Water beside lava mirrors its glow and boils.
+  col += LAVA_GLOW_COLOR * input.lavaFx.x * 0.45;
+  let boil = rainRings(input.gridPos * 1.7, input.lavaFx.y, t * 2.4, px * 1.7) * input.lavaFx.y;
+  col = mix(col, vec3<f32>(0.96, 0.97, 1.0), boil);
   let rain = rainAmount(input.gridPos);
   col += vec3<f32>(0.85, 0.95, 1.0) * rainRings(input.gridPos, rain, t, px) * 0.4 * (1.0 - input.skirt);
   col += vec3<f32>(1.0, 0.95, 0.85) * (spec + glint);
 
   // Thin films stay see-through; anything a village could drown in reads as solid blue.
   var alpha = 0.5 + 0.42 * smoothstep(0.03, 0.3, depth);
-  alpha = mix(alpha, 1.0, clamp(fresnel * 0.6 + foam * 0.7 + spec + glint, 0.0, 1.0));
+  alpha = mix(alpha, 1.0, clamp(fresnel * 0.6 + foam * 0.7 + spec + glint + boil + input.lavaFx.x * 0.3, 0.0, 1.0));
   alpha = select(alpha * smoothstep(0.015, 0.12, depth), 0.7, isSkirt);
   // Springs and village rings are re-drawn on the water so they stay readable under it.
   let ringed = shadeVillageRings(input.gridPos, px, t, select(shadeSourceMarkers(input.gridPos, px, t, col), col, isSkirt));

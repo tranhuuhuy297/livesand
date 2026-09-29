@@ -3,7 +3,7 @@ import type { GridSize } from '../core/types';
 import type { LevelDefinition } from '../game/level-definitions';
 import type { SculptTool } from '../input/sculpt-tools';
 import type { OrbitCamera } from '../render/orbit-camera';
-import type { RenderStyle } from '../render/shading-common-wgsl';
+import { SEA_LEVEL_OFF, type RenderStyle } from '../render/shading-common-wgsl';
 
 /** Water surface of the painted sea: ground dug down to (near) height 0 shows as sea water. */
 export const VIRTUAL_SEA_LEVEL = 0.6;
@@ -17,9 +17,31 @@ export function virtualRenderStyle(relief: number): Partial<RenderStyle> {
   return { minHeight: -relief * 0.3, maxHeight: relief, contourInterval, verticalScale: 1.5, showHillshade: true, seaLevel: VIRTUAL_SEA_LEVEL };
 }
 
-/** Levels are about digging; free play starts by building. */
+/**
+ * Palette position of a real map's sea level: just above the light-cyan shallows stop (0.24) and the start of the
+ * green lowlands (0.27), so land a metre above the sea never reads as already flooded.
+ */
+export const PLACE_SEA_PALETTE_T = 0.28;
+
+/**
+ * Real maps keep the procedural palette scale above their sea level, so a flat delta stays green lowland instead of
+ * spanning the whole palette; low-relief maps get extra vertical scale so levees still read in 3D. Inland maps show
+ * no sea.
+ */
+export function placeRenderStyle(t: { seaLevel: number; maxHeight: number }, relief: number): Partial<RenderStyle> {
+  const top = Math.max(t.maxHeight, t.seaLevel + relief * 0.9);
+  const verticalScale = 1.5 * Math.min(2, Math.max(1, 15 / Math.max(t.maxHeight - t.seaLevel, 1)));
+  const coastal = t.seaLevel > 0;
+  const seaLevel = coastal ? t.seaLevel : SEA_LEVEL_OFF;
+  const contourInterval = (top - t.seaLevel) / 14.5;
+  // (sea - min) / (top - min) = PLACE_SEA_PALETTE_T on coasts; inland lowlands start in the greens anyway.
+  const below = coastal ? (PLACE_SEA_PALETTE_T / (1 - PLACE_SEA_PALETTE_T)) * (top - t.seaLevel) : relief * 0.3;
+  return { minHeight: t.seaLevel - below, maxHeight: top, contourInterval, verticalScale, showHillshade: true, seaLevel };
+}
+
+/** A level's own starting tool; otherwise levels are about digging and free play starts by building. */
 export function defaultToolFor(level: LevelDefinition): SculptTool {
-  return level.villages.length > 0 ? 'lower' : 'raise';
+  return level.startTool ?? (level.villages.length > 0 ? 'lower' : 'raise');
 }
 
 /** World-space height span of the 3D box: its floor (as drawn by the perspective renderer) to the top of the relief. */
@@ -40,11 +62,12 @@ function safeArea(aspect: number): { x: number; bottom: number; top: number } {
 
 /**
  * Frames the whole box for the window's aspect: portrait screens turn it a quarter so its long side runs up the
- * screen, then the camera backs off just far enough that every box corner (floor to top of relief) is on screen.
+ * screen (unless `northUp`: real maps keep north at the top so locals recognise them), then the camera backs off just
+ * far enough that every box corner (floor to top of relief) is on screen.
  */
-export function fitOrbitCameraToWindow(camera: OrbitCamera, grid: GridSize, heightRange: { min: number; max: number }, aspect: number): void {
+export function fitOrbitCameraToWindow(camera: OrbitCamera, grid: GridSize, heightRange: { min: number; max: number }, aspect: number, northUp = false): void {
   // Portrait: nearly end-on and steeper, so the 256-cell axis spans the tall screen instead of running off its sides.
-  camera.yaw = aspect < 1 ? Math.PI / 2 + 0.12 : ORBIT_DEFAULT_YAW;
+  camera.yaw = aspect < 1 ? (northUp ? 0 : Math.PI / 2 + 0.12) : ORBIT_DEFAULT_YAW;
   if (aspect < 1) camera.pitch = PORTRAIT_PITCH;
   const safe = safeArea(aspect);
   const corners: [number, number, number][] = [];

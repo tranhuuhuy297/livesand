@@ -44,12 +44,15 @@ export class SessionEmissionField {
     this.brushFrame++;
   }
 
-  /** Rebuilds the field when any input changed; returns it (to upload) or null when nothing changed. */
-  update(levelVersion: number, sources: WaterSourceSpec[], rain: number): Float32Array | null {
-    const key = `${levelVersion}|${rain}|${this.brushFrame}|${this.handVersion}`;
+  /**
+   * Rebuilds the field when any input changed; returns it (to upload) or null when nothing changed. `prefill` (a level
+   * load's routed river water) stands in for the rain brush while it is given.
+   */
+  update(levelVersion: number, sources: WaterSourceSpec[], rain: number, prefill: Float32Array | null = null): Float32Array | null {
+    const key = `${levelVersion}|${rain}|${this.brushFrame}|${this.handVersion}|${prefill ? 'prefill' : ''}`;
     if (key === this.key) return null;
     this.key = key;
-    const brush = this.brushActive ? this.brushRain : null;
+    const brush = prefill ?? (this.brushActive ? this.brushRain : null);
     return buildEmissionField(this.grid, sources, rain, brush, this.handMask, HAND_RAIN_RATE, this.field);
   }
 }

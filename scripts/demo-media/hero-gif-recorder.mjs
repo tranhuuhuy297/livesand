@@ -2,7 +2,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DeltaGifEncoder, encodePng } from './delta-gif-encoder.mjs';
-import { captureHalf, gridToClient, installFakeCursor, openApp, step, takeOverVirtualApp } from './demo-page-hooks.mjs';
+import { appState, captureHalf, fakeCursorPosition, installFakeCursor, moveToGrid, openApp, step, takeOverVirtualApp } from './demo-page-hooks.mjs';
 
 const FRAME_MS = 60; // ~16.7 fps playback
 const GRID = { width: 256, height: 192 };
@@ -18,16 +18,7 @@ const toGrid = ({ u, v }) => ({ x: u * (GRID.width - 1), y: v * (GRID.height - 1
 const easeOut = (t) => 1 - (1 - t) ** 3;
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 const villageStates = async (page) =>
-  JSON.stringify((await state(page)).villages.map((v) => `${v.state} ${v.floodedSec.toFixed(1)}s`));
-
-async function state(page) {
-  return page.evaluate(() => window.__livesand.debug.state());
-}
-
-async function moveToGrid(page, p) {
-  const client = await gridToClient(page, p.x, p.y);
-  await page.mouse.move(client.x, client.y);
-}
+  JSON.stringify((await appState(page)).villages.map((v) => `${v.state} ${v.floodedSec.toFixed(1)}s`));
 
 /** Returns the GIF bytes; `samplesDir` receives a few full-size frames as PNG for review. */
 export async function recordHeroGif(browser, baseUrl, { samplesDir = null, log = console.log } = {}) {
@@ -84,20 +75,18 @@ export async function recordHeroGif(browser, baseUrl, { samplesDir = null, log =
     log(`  drained: ${await villageStates(page)}`);
 
     // Hold the level to the end of its clock (unrecorded), then the result card; the pointer glides to "Star".
-    let s = await state(page);
+    let s = await appState(page);
     for (let guard = 0; guard < 40 && s.phase === 'running'; guard++) {
       await step(page, 10, 0.5);
-      s = await state(page);
+      s = await appState(page);
     }
     if (s.phase !== 'won') throw new Error(`hero GIF: expected level 1 to be won, got phase "${s.phase}"`);
+    await step(page, 5, 0.5); // the result card waits for ~2 s of frames after the level ends
     await page.waitForTimeout(800); // result card pop-in animation
     await shoot({ newScene: true, dither: true, delayMs: 700 });
     const star = await page.locator('.ls-result .ls-star-link').boundingBox();
     if (!star) throw new Error('hero GIF: result card has no Star on GitHub link');
-    const from = await page.evaluate(() => {
-      const t = document.getElementById('demo-cursor').style.translate.split(' ').map(parseFloat);
-      return { x: t[0] + 4, y: t[1] + 3 };
-    });
+    const from = await fakeCursorPosition(page);
     const to = { x: star.x + star.width * 0.62, y: star.y + star.height * 0.6 };
     const GLIDE_FRAMES = 12;
     for (let i = 1; i <= GLIDE_FRAMES; i++) {

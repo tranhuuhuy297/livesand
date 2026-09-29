@@ -14,6 +14,7 @@ struct Frame {
   villages: array<vec4<f32>, 16>,    // x, y, radius (grid units), state code (0 safe, 1 flooding, 2 lost)
   villageInfo: array<vec4<f32>, 16>, // flood01, unused...
   sources: array<vec4<f32>, 8>,      // springs: x, y, radius (grid units), unused
+  atmosphere: vec4<f32>,             // volcanic ash 0..1, unused...
 };
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var<storage, read> terrainBuf: array<f32>;
@@ -23,7 +24,7 @@ struct Frame {
 `;
 
 // Emits a cubic B-spline sampler returning (value, d/dx, d/dy); smoother than bilinear so contours stay round when magnified.
-function bsplineSampler(name: string, fetch: string): string {
+export function bsplineSampler(name: string, fetch: string): string {
   return /* wgsl */ `
 fn ${name}(p: vec2<f32>) -> vec3<f32> {
   let base = floor(p);
@@ -49,7 +50,8 @@ fn ${name}(p: vec2<f32>) -> vec3<f32> {
 `;
 }
 
-function bilinearSampler(name: string, fetch: string, type: string): string {
+// Emits a bilinear sampler over clamped cell fetches.
+export function bilinearSampler(name: string, fetch: string, type: string): string {
   return /* wgsl */ `
 fn ${name}(p: vec2<f32>) -> ${type} {
   let base = floor(p);

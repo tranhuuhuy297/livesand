@@ -67,9 +67,10 @@ export class ProjectorModeApp {
     });
     this.physical.attachProjectorSurface(this.stage.root);
     this.scene = new SandboxGpuScene(gpu, grid, configureCanvas(gpu, this.stage.canvas), projectorRenderStyle(this.physical, grid));
-    // Real sand brings its own landscape: free play there is the blank box (no virtual springs on the sand).
+    // Real sand brings its own landscape: free play there is the blank box (no virtual springs on the sand), and
+    // projector mode has no lava, so volcano levels fall back to it too.
     const picked = params.levelId ? getLevel(params.levelId) : BLANK_SANDBOX_LEVEL;
-    const level = isFreePlay(picked) ? BLANK_SANDBOX_LEVEL : picked;
+    const level = isFreePlay(picked) || picked.eruption ? BLANK_SANDBOX_LEVEL : picked;
     this.session = new SandboxSession(this.scene, level, { keepTerrain: true });
     this.loop = new FrameLoop((dt) => this.tick(dt), (err) => this.fail(err));
     this.monitor = new GpuErrorMonitor(gpu.device, (msg) => this.fail(new Error(msg)));
@@ -83,10 +84,12 @@ export class ProjectorModeApp {
     await this.gpu.device.queue.onSubmittedWorkDone();
     if (this.failed) return;
     publishDebugApi({
-      readWater: () => this.session.readWater(),
+      readWater: () => this.scene.sim.readWater(),
+      readLava: () => Promise.reject(new Error('Projector mode has no lava')),
+      readRock: () => Promise.reject(new Error('Projector mode has no lava')),
       getHeights: () => this.session.heights.slice(),
-      stepFrames: (n, dtSec = 1 / 60) =>
-        stepFramesScripted(this.loop, this.gpu.device, n, dtSec, (dt, draw) => this.frame(dt, Math.ceil(dt / this.session.simDt) + 1, draw)),
+      stepFrames: (n, dtSec = 1 / 60, draw = true) =>
+        stepFramesScripted(this.loop, this.gpu.device, n, dtSec, (dt, drawFrame) => this.frame(dt, Math.ceil(dt / this.session.simDt) + 1, drawFrame), draw),
       state: () => this.state(),
     });
     this.loop.start();

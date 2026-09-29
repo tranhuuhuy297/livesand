@@ -1,5 +1,6 @@
 // WGSL for the projector view: one full-screen triangle, the grid stretched over the whole target.
 import { SHADING_COMMON_WGSL } from './shading-common-wgsl';
+import { lavaShadingWgsl } from './lava-shader-variants';
 
 const TOP_DOWN_ENTRY_WGSL = /* wgsl */ `
 struct TopDownVsOut {
@@ -49,29 +50,63 @@ fn fsTopDown(input: TopDownVsOut) -> @location(0) vec4<f32> {
   let ts = terrainSmooth(p);
   let fwH = fwidth(ts.x);
   let t = frame.misc.y;
+  let hillOn = frame.misc.x > 0.5;
+
+  // Lava layers: fx = (glow on nearby ground, steam where lava meets water, smoothed lava slope); zero without lava.
+  var lava = 0.0;
+  var rock = 0.0;
+  var fx = vec4<f32>(0.0);
+  if (lavaEnabled()) {
+    lava = lavaSmooth(p).x;
+    rock = rockBilinear(p);
+    fx = lavaFxBilinear(p);
+  }
+  let lavaCover = lavaCoverage(lava);
+  let rockCover = basaltCoverage(rock) * (1.0 - lavaCover);
 
   var col = elevationColor(heightToUnit(ts.x));
-  if (frame.misc.x > 0.5) {
-    col *= hillshadeFactor(ts.yz, 2.6);
+  var grad = ts.yz;
+  if (rockCover > 0.0) {
+    let basalt = basaltSurface(p, px);
+    col = mix(col, basalt.albedo, rockCover);
+    grad += basalt.bump * rockCover;
   }
-  col = applyContours(col, contourLines(ts.x, frame.heightStyle.z, fwH) * seaContourFade(ts.x));
+  if (hillOn) {
+    col *= hillshadeFactor(grad, 2.6);
+  }
+  col = applyContours(col, contourLines(ts.x, frame.heightStyle.z, fwH) * seaContourFade(ts.x) * (1.0 - lavaCover));
+  col = applyLavaGlow(col, col, fx.x * (1.0 - lavaCover), 1.3);
+  if (lavaCover > 0.0) {
+    // Crust takes the relief shading; the incandescent part ignores it.
+    let molten = shadeLava(p, lava, fx.zw, t, px);
+    col = mix(col, molten.crust * select(1.0, hillshadeFactor(ts.yz, 2.6), hillOn) + molten.emit, lavaCover);
+  }
 
   let ws = waterSmooth(p);
   let depth = displayDepth(ws.x, ts.x);
   let sea = seaAmount(ws.x, ts.x);
   let rain = rainAmount(p);
-  col *= 1.0 - 0.14 * rain; // wet sand darkens under rain
+  col *= 1.0 - 0.14 * rain * (1.0 - lavaCover); // wet sand darkens under rain
   col = shadeVillageHouses(p, px, t, col);
   if (depth > 0.003) {
     let surfGrad = (ts.yz + ws.yz) * (1.0 - sea);
     col = shadeWaterTopDown(col, p, depth, sea, surfGrad, flowVelocity(p, depth), rain, t, px);
+    // Water next to lava mirrors its glow and boils.
+    let wet = smoothstep(0.02, 0.2, depth);
+    col += LAVA_GLOW_COLOR * fx.x * 0.3 * wet;
+    col = mix(col, vec3<f32>(0.96, 0.97, 1.0), rainRings(p * 1.7, fx.y, t * 2.4, px * 1.7) * fx.y * wet);
   } else {
-    col = mix(col, col * 0.55, rainRings(p, rain, t, px) * 0.7);
+    col = mix(col, col * 0.55, rainRings(p, rain, t, px) * 0.7 * (1.0 - lavaCover));
   }
+  let steam = steamWisps(p, fx.y, fx.x, t);
+  col = mix(col, steam.rgb, steam.a);
   col = shadeSourceMarkers(p, px, t, col);
   col = shadeVillageRings(p, px, t, col);
   return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
 `;
 
-export const TOP_DOWN_PROJECTOR_WGSL = `${SHADING_COMMON_WGSL}\n${TOP_DOWN_ENTRY_WGSL}`;
+/** Full projector module; `lava` false compiles the lava layers down to constants. */
+export function topDownProjectorWgsl(lava: boolean): string {
+  return [SHADING_COMMON_WGSL, lavaShadingWgsl(lava), TOP_DOWN_ENTRY_WGSL].join('\n');
+}

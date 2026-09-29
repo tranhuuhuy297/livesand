@@ -3,10 +3,17 @@
 export interface LiveSandDebugApi {
   /** Current water depth per cell (row-major, north = row 0). */
   readWater(): Promise<Float32Array>;
+  /** Molten lava depth per cell (rejects where there is no lava sim, e.g. projector mode). */
+  readLava(): Promise<Float32Array>;
+  /** Solidified rock thickness per cell (rejects without a lava sim). */
+  readRock(): Promise<Float32Array>;
   /** Copy of the CPU terrain heightmap. */
   getHeights(): Float32Array;
-  /** Runs n live-like frames (held pointer input included) of dtSec each (default 1/60 s) with the rAF loop paused; draws only the last. */
-  stepFrames(n: number, dtSec?: number): Promise<void>;
+  /**
+   * Runs n live-like frames (held pointer input included) of dtSec each (default 1/60 s) with the rAF loop paused;
+   * draws only the last one, or none when `draw` is false (pure fast-forward: canvas and HUD are not refreshed).
+   */
+  stepFrames(n: number, dtSec?: number, draw?: boolean): Promise<void>;
   /** JSON-friendly snapshot of mode, level, game phase, villages, tool and timing. */
   state(): Record<string, unknown>;
 }
@@ -29,6 +36,8 @@ function notReady(): never {
 
 const PENDING_DEBUG: LiveSandDebugApi = {
   readWater: () => Promise.reject(new Error('LiveSand is not ready yet')),
+  readLava: () => Promise.reject(new Error('LiveSand is not ready yet')),
+  readRock: () => Promise.reject(new Error('LiveSand is not ready yet')),
   getHeights: notReady,
   stepFrames: () => Promise.reject(new Error('LiveSand is not ready yet')),
   state: () => ({ ready: false }),

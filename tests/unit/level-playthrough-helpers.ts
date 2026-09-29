@@ -2,6 +2,7 @@
 import { DEFAULT_GRID, type GridSize } from '../../src/core/types';
 import type { LevelDefinition } from '../../src/game/level-definitions';
 import { defaultRelief, generateTerrain, layoutToCell } from '../../src/game/terrain-generators';
+import { riverPrefillEmission } from '../../src/game/terrain-flow-routing';
 import { VillageFloodGame, buildEmissionField, type GamePhase } from '../../src/game/village-flood-game';
 import { buildVillageSculptFloor } from '../../src/game/village-sculpt-floor';
 import { applySculptStroke, type SculptTool } from '../../src/input/sculpt-tools';
@@ -44,12 +45,16 @@ export function brushPosition(stroke: PlayerStroke, grid: GridSize, t: number): 
   return { x: pts[k].x + (pts[k + 1].x - pts[k].x) * f, y: pts[k].y + (pts[k + 1].y - pts[k].y) * f };
 }
 
-/** Plays a level to the end (or until lost) after its prefill, applying the strokes once per simulation step. */
-export function playLevel(level: LevelDefinition, strokes: PlayerStroke[] = [], grid: GridSize = DEFAULT_GRID): PlaythroughResult {
-  const heights = generateTerrain(grid, level.recipe);
+/**
+ * Plays a level to the end (or until lost) after its prefill, applying the strokes once per simulation step.
+ * `terrain` replaces the recipe (real places); it is copied, never modified.
+ */
+export function playLevel(level: LevelDefinition, strokes: PlayerStroke[] = [], grid: GridSize = DEFAULT_GRID, terrain?: Float32Array): PlaythroughResult {
+  const heights = terrain ? terrain.slice() : generateTerrain(grid, level.recipe);
   const sim = new ReferenceWaterSim(grid, heights, { ...REFERENCE_SIM_DEFAULTS, openEdges: level.openEdges });
   const game = new VillageFloodGame(level, grid);
-  const bounds = { min: 0, max: defaultRelief(grid), floor: buildVillageSculptFloor(heights, grid, game.villages) };
+  const top = heights.reduce((m, h) => Math.max(m, h), defaultRelief(grid));
+  const bounds = { min: 0, max: top, floor: buildVillageSculptFloor(heights, grid, game.villages) };
   const probes = game.probes();
   const emission = new Float32Array(grid.width * grid.height);
   const depths = new Float32Array(probes.length);
@@ -57,8 +62,9 @@ export function playLevel(level: LevelDefinition, strokes: PlayerStroke[] = [], 
   const peakDepths = probes.map(() => 0);
   const dt = sim.params.dt;
   const maxSteps = Math.ceil(level.durationSec / dt) + 10;
-  // Like SandboxSession.loadLevel: the springs run before the briefing so the rivers already flow at the start.
-  buildEmissionField(grid, level.sources, 0, null, null, 0, emission);
+  // Like SandboxSession.loadLevel: springs (and any prefill rain, routed into the rivers) run before the briefing.
+  const prefill = level.prefillRain ? riverPrefillEmission(heights, grid, level.prefillRain) : null;
+  buildEmissionField(grid, level.sources, 0, prefill, null, 0, emission);
   for (let step = Math.round((level.prefillSec ?? 0) / dt); step > 0; step--) sim.step(emission);
   const last: ({ x: number; y: number } | null)[] = strokes.map(() => null);
   game.start();

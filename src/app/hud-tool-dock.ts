@@ -1,15 +1,15 @@
 // Bottom dock: sculpt/rain tool buttons with key hints and the brush size slider.
-import type { SculptTool } from '../input/sculpt-tools';
-import { h, setText } from './hud-dom-helpers';
-import { BRUSH_RADIUS_MAX, BRUSH_RADIUS_MIN, TOOLS } from './sculpt-tool-settings';
+import { h, setHidden, setText } from './hud-dom-helpers';
+import { BRUSH_RADIUS_MAX, BRUSH_RADIUS_MIN, TOOLS, type AppTool } from './sculpt-tool-settings';
 import type { HudActions, HudSnapshot } from './hud-snapshot';
 
 export class ToolDock {
   readonly root: HTMLDivElement;
-  private readonly buttons = new Map<SculptTool, HTMLButtonElement>();
+  private readonly buttons = new Map<AppTool, HTMLButtonElement>();
   private readonly slider: HTMLInputElement;
   private readonly sizeText = h('span', { class: 'ls-brush-value' });
-  private tool: SculptTool | null = null;
+  private tool: AppTool | null = null;
+  private lavaTool: boolean | null = null;
   private radius = -1;
 
   constructor(actions: HudActions) {
@@ -56,6 +56,11 @@ export class ToolDock {
   }
 
   update(s: HudSnapshot): void {
+    if (this.lavaTool !== s.lavaTool) {
+      this.lavaTool = s.lavaTool;
+      const lava = this.buttons.get('lava');
+      if (lava) setHidden(lava, !s.lavaTool);
+    }
     if (this.tool !== s.tool) {
       this.tool = s.tool;
       for (const [id, btn] of this.buttons) {

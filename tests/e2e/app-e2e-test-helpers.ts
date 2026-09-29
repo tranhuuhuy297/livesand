@@ -47,8 +47,12 @@ export async function openApp(page: Page, query: string): Promise<void> {
 }
 
 export const appState = (page: Page): Promise<AppState> => page.evaluate(() => window.__livesand!.debug.state() as unknown as AppState);
-export const stepFrames = (page: Page, n: number, dt: number): Promise<void> =>
-  page.evaluate(([count, seconds]) => window.__livesand!.debug.stepFrames(count, seconds), [n, dt] as const);
+/** Scripted frames; `draw` false fast-forwards without drawing (software WebGPU draws cost far more than sim steps). */
+export const stepFrames = (page: Page, n: number, dt: number, draw = true): Promise<void> =>
+  page.evaluate(([count, seconds, drawLast]) => window.__livesand!.debug.stepFrames(count, seconds, drawLast), [n, dt, draw] as const);
+
+/** The result card waits ~2 s after a level ends so the aftermath is seen first: step past that, drawing the last frame. */
+export const revealResult = (page: Page): Promise<void> => stepFrames(page, 5, 0.5);
 
 export const waterSum = (page: Page): Promise<number> =>
   page.evaluate(async () => (await window.__livesand!.debug.readWater()).reduce((s, d) => s + d, 0));

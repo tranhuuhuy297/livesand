@@ -31,8 +31,16 @@ describe('packFrameUniforms', () => {
     expect(Array.from(out.subarray(EFFECTS, EFFECTS + 4))).toEqual([Math.fround(0.6), 1, MAX_SOURCES, 1]);
     expect(Array.from(out.subarray(SOURCES + 4, SOURCES + 7))).toEqual([1, 2, 4]);
     expect(out[SOURCES + MAX_SOURCES * 4 - 4]).toBe(MAX_SOURCES - 1);
-    expect(SOURCES + MAX_SOURCES * 4).toBe(FRAME_UNIFORM_FLOATS);
+    expect(SOURCES + MAX_SOURCES * 4 + 4).toBe(FRAME_UNIFORM_FLOATS);
     expect(pack()[EFFECTS]).toBe(SEA_LEVEL_OFF);
+  });
+
+  it('packs the volcanic ash level (clamped) after the springs', () => {
+    const ATMOSPHERE = SOURCES + MAX_SOURCES * 4;
+    expect(pack({ ...DEFAULT_RENDER_STYLE, ashLevel: 0.4 })[ATMOSPHERE]).toBeCloseTo(0.4, 6);
+    expect(pack({ ...DEFAULT_RENDER_STYLE, ashLevel: 7 })[ATMOSPHERE]).toBe(1);
+    expect(pack()[ATMOSPHERE]).toBe(0);
+    expect(FRAME_UNIFORM_FLOATS % 4).toBe(0);
   });
 
   it('merges sea and storm like the other numeric style fields', () => {

@@ -1,6 +1,6 @@
 {
   "name": "livesand",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An AR sandbox in a browser tab: WebGPU shallow-water simulation on real sand (iPhone LiDAR + projector) or a virtual sandbox.",
   "type": "module",
   "license": "MIT",
@@ -34,7 +34,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "demo:media": "npm run build:server && node scripts/record-demo-media.mjs"
+    "demo:media": "npm run build:server && node scripts/record-demo-media.mjs",
+    "bake:places": "node scripts/bake-real-places.mjs"
   },
   "keywords": [
     "ar-sandbox",

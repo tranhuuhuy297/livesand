@@ -2,10 +2,10 @@
 // resizes the brush, two-finger touch orbits and pinch-zooms.
 import type { Vec2 } from '../core/types';
 import { sampleHeightBilinear } from '../input/heightfield-ray-picker';
-import { applySculptStroke, type SculptBounds, type SculptTool } from '../input/sculpt-tools';
+import { applySculptStroke, type SculptBounds } from '../input/sculpt-tools';
 import type { OrbitCamera } from '../render/orbit-camera';
 import type { SandboxSession } from './sandbox-session';
-import { TOOL_STRENGTH } from './sculpt-tool-settings';
+import { TOOL_STRENGTH, type AppTool } from './sculpt-tool-settings';
 import { applyPinchOrbit, applyWheel, ORBIT_RADIANS_PER_PX, pinchState, type PinchState } from './pointer-camera-gestures';
 import { screenToGrid, type ViewGeometry } from './view-screen-mapping';
 
@@ -14,7 +14,7 @@ export interface PointerInputHost {
   readonly session: SandboxSession;
   readonly camera: OrbitCamera;
   geometry(): ViewGeometry;
-  tool(): SculptTool;
+  tool(): AppTool;
   brushRadius(): number;
   changeBrushRadius(delta: number): void;
   sculptBounds(): SculptBounds;
@@ -81,7 +81,7 @@ export class PointerInputController {
     this.host.canvas.classList.toggle('is-orbit-ready', held);
   }
 
-  /** Applies the held tool for this frame: rain follows the cursor, sculpting follows the path since last frame. */
+  /** Applies the held tool for this frame: rain and lava follow the cursor, sculpting follows the path since last frame. */
   applyFrame(dtSec: number): void {
     const { session } = this.host;
     if (this.mode === 'pending') {
@@ -91,12 +91,14 @@ export class PointerInputController {
     const p = this.mode === 'tool' && this.hover ? screenToGrid(this.host.geometry(), this.hover.x, this.hover.y) : null;
     const tool = this.host.tool();
     if (!p || tool !== 'rain') session.clearBrushRain();
+    if (!p || tool !== 'lava') session.lava.clearBrush();
     const last = this.lastGrid;
     this.lastGrid = p;
     if (!p) return;
     const radius = this.host.brushRadius();
-    if (tool === 'rain') {
-      session.paintBrushRain(p.x, p.y, radius);
+    if (tool === 'rain' || tool === 'lava') {
+      if (tool === 'rain') session.paintBrushRain(p.x, p.y, radius);
+      else session.lava.paintBrush(p.x, p.y, radius);
       return;
     }
     const brush = { radius, strength: TOOL_STRENGTH[tool] };

@@ -1,33 +1,24 @@
 // CPU-side sandbox shared by virtual and projector modes: heightmap, emission, level + game, fixed-step sim timing.
 import type { GridSize } from '../core/types';
 import { sourceMarkers } from '../game/emission-field';
-import { isFreePlay, peakStormRain, type LevelDefinition } from '../game/level-definitions';
-import { generateTerrain } from '../game/terrain-generators';
+import { isFreePlay, type LevelDefinition } from '../game/level-definitions';
 import { VillageFloodGame } from '../game/village-flood-game';
+import { riverPrefillEmission } from '../game/terrain-flow-routing';
 import { buildVillageSculptFloor } from '../game/village-sculpt-floor';
-import type { OrbitCamera } from '../render/orbit-camera';
-import type { ViewMode } from './app-url-params';
 import type { SandboxGpuScene } from './sandbox-gpu-scene';
+import { FREE_PLAY_RAIN_RATE, LAVA_NEAR_DEPTH, SANDBOX_LAVA_FLOW, type SessionFrameOptions } from './sandbox-session-settings';
+import { ashLevelOf, stormLevelOf } from './session-atmosphere';
 import { SessionEmissionField } from './session-emission-field';
+import { LevelTerrainSource } from './session-level-terrain';
+import { eruptionCrater, SessionLavaField } from './session-lava-field';
 
-/** Real-time cap on sim steps per frame; a slow frame drops sim time instead of spiralling. */
-export const MAX_STEPS_PER_FRAME = 8;
-/** Global rain of the free-play "Make it rain" toggle (units/s per cell): enough to pool in every hollow. */
-export const FREE_PLAY_RAIN_RATE = 0.004;
-
-export interface SessionFrameOptions {
-  /** Simulated seconds to advance (already scaled by any speed-up). */
-  dtSim: number;
-  maxSteps: number;
-  view: ViewMode | null;
-  camera: OrbitCamera | null;
-  /** 2D only: map turned a quarter for portrait screens. */
-  rotated?: boolean;
-}
+export { FREE_PLAY_RAIN_RATE, MAX_STEPS_PER_FRAME, SANDBOX_LAVA_FLOW, type SessionFrameOptions } from './sandbox-session-settings';
 
 export class SandboxSession {
   readonly grid: GridSize;
   readonly heights: Float32Array;
+  /** Crater + lava brush emission; `active` while lava is emitted or still flowing (lava steps run only then). */
+  readonly lava: SessionLavaField;
   totalSteps = 0;
   lastSteps = 0;
   private readonly scene: SandboxGpuScene;
@@ -40,6 +31,8 @@ export class SandboxSession {
   private levelVersion = 0;
   private floor: Float32Array | null = null;
   private freeRain = false;
+  private nearLava: boolean[] = [];
+  private readonly terrain: LevelTerrainSource;
 
   /** keepTerrain: the heightmap comes from outside (depth camera), so levels never regenerate it. */
   constructor(scene: SandboxGpuScene, level: LevelDefinition, opts: { keepTerrain: boolean }) {
@@ -47,7 +40,9 @@ export class SandboxSession {
     this.grid = scene.sim.grid;
     this.heights = new Float32Array(this.grid.width * this.grid.height);
     this.emission = new SessionEmissionField(this.grid);
+    this.lava = new SessionLavaField(this.grid);
     this.keepTerrain = opts.keepTerrain;
+    this.terrain = new LevelTerrainSource(this.grid);
     this.loadLevel(level);
   }
 
@@ -73,12 +68,17 @@ export class SandboxSession {
     return this.floor;
   }
 
-  /** 0..1 storm strength for the rain visuals: the level storm relative to its peak, or the free-play rain toggle. */
   get stormLevel(): number {
-    if (isFreePlay(this.currentLevel)) return this.freeRain ? 1 : 0;
-    const peak = peakStormRain(this.currentLevel);
-    if (!(peak > 0) || this.currentGame.phase !== 'running') return 0;
-    return Math.min(1, Math.max(0, this.currentGame.currentRainRate() / peak));
+    return stormLevelOf(this.currentLevel, this.currentGame, this.freeRain);
+  }
+
+  get ashLevel(): number {
+    return ashLevelOf(this.currentLevel, this.currentGame);
+  }
+
+  /** Per village: molten lava within a couple of village radii, from the latest lava probe readback. */
+  get lavaNear(): readonly boolean[] {
+    return this.nearLava;
   }
 
   get freePlayRain(): boolean {
@@ -90,15 +90,25 @@ export class SandboxSession {
     this.freeRain = on && isFreePlay(this.currentLevel);
   }
 
-  /** Loads (or restarts) a level: fresh terrain unless external, springs pre-run, new game in the ready phase. */
-  loadLevel(level: LevelDefinition): void {
+  /**
+   * Loads (or restarts) a level: fresh terrain unless external, lava and rock cleared, springs pre-run, new game in
+   * the ready phase. Real-place levels need `terrain` the first time; restarts reuse it.
+   */
+  loadLevel(level: LevelDefinition, terrain?: Float32Array): void {
+    const heights = this.keepTerrain ? null : this.terrain.heightsFor(level, terrain);
     this.currentLevel = level;
     this.currentGame = new VillageFloodGame(level, this.grid);
     if (!isFreePlay(level)) this.freeRain = false;
-    if (!this.keepTerrain) this.heights.set(generateTerrain(this.grid, level.recipe));
+    if (heights) this.heights.set(heights);
     this.floor = this.keepTerrain ? null : buildVillageSculptFloor(this.heights, this.grid, this.currentGame.villages);
     this.terrainDirty = true;
     this.scene.setOpenEdges(level.openEdges);
+    this.scene.setLavaParams({ ...SANDBOX_LAVA_FLOW, ...level.lavaFlow, openEdges: level.openEdges });
+    this.scene.lava?.clear();
+    this.lava.reset();
+    this.nearLava = [];
+    // Eruption levels compile the lava shaders now, under the briefing, rather than when the crater first spills.
+    this.scene.setLavaVisible(level.eruption !== undefined);
     this.scene.sim.clearWater();
     this.scene.setProbes(this.currentGame.probes());
     this.scene.setVillages(this.currentGame.markers());
@@ -135,9 +145,8 @@ export class SandboxSession {
 
   /** One frame: uploads, fixed sim steps, probes, drawing, then the game clock advances by the simulated time. */
   frame(opts: SessionFrameOptions): void {
-    const sim = this.scene.sim;
     if (this.terrainDirty) {
-      sim.uploadTerrain(this.heights);
+      this.scene.uploadTerrain(this.heights);
       this.terrainDirty = false;
     }
     const dt = this.simDt;
@@ -148,32 +157,36 @@ export class SandboxSession {
       this.accumulator = Math.min(this.accumulator - steps * dt, dt);
     }
     this.updateEmission();
+    const lava = this.lava.active && this.scene.lava !== null;
+    if (lava) this.scene.setLavaVisible(true);
     this.scene.setVillages(this.currentGame.markers());
-    this.scene.submitFrame({ steps, view: opts.view, camera: opts.camera, rotated: opts.rotated });
+    this.scene.submitFrame({ steps, lavaSteps: lava ? steps : 0, probeLava: lava, view: opts.view, camera: opts.camera, rotated: opts.rotated });
     this.lastSteps = steps;
     this.totalSteps += steps;
-    if (steps > 0) this.currentGame.update(steps * dt, this.scene.probeValues());
+    const reading = lava ? this.scene.lavaReading() : null;
+    this.nearLava = reading ? Array.from(reading.near, (d) => d > LAVA_NEAR_DEPTH) : [];
+    this.lava.track(steps > 0, reading?.max ?? null);
+    if (steps > 0) this.currentGame.update(steps * dt, this.scene.probeValues(), reading?.villages ?? null);
   }
 
-  readWater(): Promise<Float32Array> {
-    return this.scene.sim.readWater();
-  }
-
-  /** Runs the springs for the level's prefill time so the first frame already shows rivers and a filling lake. */
+  /** Runs the springs (and any prefill rain, routed into the rivers) so the first frame already shows rivers and lakes. */
   private prefill(level: LevelDefinition): void {
     const steps = this.keepTerrain ? 0 : Math.round((level.prefillSec ?? 0) / this.simDt);
     if (!(steps > 0)) return;
-    this.scene.sim.uploadTerrain(this.heights);
+    this.scene.uploadTerrain(this.heights);
     this.terrainDirty = false;
-    this.updateEmission();
+    this.updateEmission(level.prefillRain ? riverPrefillEmission(this.heights, this.grid, level.prefillRain) : null);
     this.scene.runSteps(steps);
   }
 
-  private updateEmission(): void {
+  /** `prefill` is the level load's river water, poured only while the prefill runs. */
+  private updateEmission(prefill: Float32Array | null = null): void {
     const game = this.currentGame;
+    const running = game.phase === 'running';
     const freeRain = this.freeRain && isFreePlay(this.currentLevel) ? FREE_PLAY_RAIN_RATE : 0;
-    const rain = game.phase === 'running' ? game.currentRainRate() + freeRain : 0;
-    const field = this.emission.update(this.levelVersion, this.currentLevel.sources, rain);
+    const field = this.emission.update(this.levelVersion, this.currentLevel.sources, running ? game.currentRainRate() + freeRain : 0, prefill);
     if (field) this.scene.sim.uploadEmission(field);
+    const lavaField = this.scene.lava ? this.lava.update(this.levelVersion, eruptionCrater(this.currentLevel, game)) : null;
+    if (lavaField) this.scene.lava?.uploadEmission(lavaField);
   }
 }

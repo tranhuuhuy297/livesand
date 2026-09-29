@@ -14,13 +14,15 @@ import { generateTerrain, layoutToCell } from '../../src/game/terrain-generators
 import { playLevel, type PlayerStroke } from './level-playthrough-helpers';
 
 const { width: W, height: H } = DEFAULT_GRID;
+// Procedural water levels; the volcano and the real-map level have their own tests (level-volcano / level-hoi-an).
+const FLOOD_LEVELS = LEVELS.filter((l) => !l.eruption && !l.place);
 const heightAt = (h: Float32Array, u: number, v: number) => h[Math.round(layoutToCell(v, H)) * W + Math.round(layoutToCell(u, W))];
 
 describe('level catalogue', () => {
   it('has at least three uniquely named levels with escalating village counts', () => {
-    expect(LEVELS.length).toBeGreaterThanOrEqual(3);
+    expect(FLOOD_LEVELS.length).toBeGreaterThanOrEqual(3);
     expect(new Set(LEVELS.map((l) => l.id)).size).toBe(LEVELS.length);
-    const counts = LEVELS.map((l) => l.villages.length);
+    const counts = FLOOD_LEVELS.map((l) => l.villages.length);
     expect(counts[0]).toBeGreaterThanOrEqual(1);
     for (let i = 1; i < counts.length; i++) expect(counts[i]).toBeGreaterThanOrEqual(counts[i - 1]);
   });
@@ -32,7 +34,7 @@ describe('level catalogue', () => {
     expect(level.floodDepthThreshold).toBeGreaterThan(0);
     expect(level.floodSecondsToLose).toBeGreaterThan(0);
     expect(Object.values(level.openEdges).some(Boolean)).toBe(true);
-    expect(level.sources.length + level.storm.length).toBeGreaterThan(0);
+    expect(level.sources.length + level.storm.length + (level.eruption?.keyframes.length ?? 0)).toBeGreaterThan(0);
     level.storm.forEach((k, i) => {
       expect(k.rain).toBeGreaterThanOrEqual(0);
       if (i > 0) expect(k.t).toBeGreaterThan(level.storm[i - 1].t);
@@ -52,7 +54,7 @@ describe('level catalogue', () => {
     }
   });
 
-  it.each(LEVELS.map((l) => [l.id, l] as const))('%s puts every source on higher ground than every village', (_id, level) => {
+  it.each(FLOOD_LEVELS.map((l) => [l.id, l] as const))('%s puts every source on higher ground than every village', (_id, level) => {
     const h = generateTerrain(DEFAULT_GRID, level.recipe);
     for (const s of level.sources) {
       for (const v of level.villages) expect(heightAt(h, s.u, s.v)).toBeGreaterThan(heightAt(h, v.u, v.v) + 5);
@@ -121,7 +123,7 @@ const SOLUTIONS: Record<string, PlayerStroke[]> = {
 };
 
 describe('level hydrology (CPU replica of the GPU water model)', () => {
-  it.each(LEVELS.map((l) => [l.id, l] as const))('%s: doing nothing floods every village before time runs out', (_id, level) => {
+  it.each(FLOOD_LEVELS.map((l) => [l.id, l] as const))('%s: doing nothing floods every village before time runs out', (_id, level) => {
     const result = playLevel(level);
     expect(result.phase).toBe('lost');
     expect(result.summary.saved).toBe(0);
@@ -130,7 +132,7 @@ describe('level hydrology (CPU replica of the GPU water model)', () => {
     for (const d of result.peakDepths) expect(d).toBeGreaterThan(level.floodDepthThreshold * 1.5);
   }, 60_000);
 
-  it.each(LEVELS.map((l) => [l.id, l] as const))('%s: the intended earthworks save every village', (_id, level) => {
+  it.each(FLOOD_LEVELS.map((l) => [l.id, l] as const))('%s: the intended earthworks save every village', (_id, level) => {
     const strokes = SOLUTIONS[level.id];
     expect(strokes).toBeDefined();
     const result = playLevel(level, strokes);
